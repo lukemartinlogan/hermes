@@ -10,32 +10,41 @@
  * have access to the file, you may request a copy from help@hdfgroup.org.   *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#ifndef HERMES_INCLUDE_HERMES_MEMORY_ALLOCATOR_MP_PAGE_H_
-#define HERMES_INCLUDE_HERMES_MEMORY_ALLOCATOR_MP_PAGE_H_
+#ifndef HERMES_SHM_INCLUDE_HERMES_SHM_MEMORY_ALLOCATOR_HEAP_H_
+#define HERMES_SHM_INCLUDE_HERMES_SHM_MEMORY_ALLOCATOR_HEAP_H_
 
-#include "hermes_shm/data_structures/ipc/iqueue.h"
+#include "allocator.h"
+#include "hermes_shm/thread/lock.h"
 
 namespace hshm::ipc {
 
-struct MpPage {
-  bitfield32_t flags_;  /**< Flags of the page (e.g., free/alloc) */
-  /** Offset from the start of the page to the beginning of this header */
-  uint32_t off_;
-  size_t page_size_;    /**< The total size of the page allocated */
+struct HeapAllocator {
+  std::atomic<size_t> heap_off_;
+  size_t heap_size_;
 
-  HSHM_ALWAYS_INLINE void SetAllocated() {
-    flags_.SetBits(0x1);
+  /** Default constructor */
+  HeapAllocator() : heap_off_(0), heap_size_(0) {}
+
+  /** Emplace constructor */
+  explicit HeapAllocator(size_t heap_off, size_t heap_size)
+  : heap_off_(heap_off), heap_size_(heap_size) {}
+
+  /** Explicit initialization */
+  void shm_init(size_t heap_off, size_t heap_size) {
+    heap_off_ = heap_off;
+    heap_size_ = heap_size;
   }
 
-  HSHM_ALWAYS_INLINE void UnsetAllocated() {
-    flags_.Clear();
-  }
-
-  HSHM_ALWAYS_INLINE bool IsAllocated() const {
-    return flags_.All(0x1);
+  /** Allocate off heap */
+  HSHM_ALWAYS_INLINE OffsetPointer AllocateOffset(size_t size) {
+    size_t off = heap_off_.fetch_add(size);
+    if (off + size > heap_size_) {
+      throw OUT_OF_MEMORY.format();
+    }
+    return OffsetPointer(off);
   }
 };
 
 }  // namespace hshm::ipc
 
-#endif  // HERMES_INCLUDE_HERMES_MEMORY_ALLOCATOR_MP_PAGE_H_
+#endif  // HERMES_SHM_INCLUDE_HERMES_SHM_MEMORY_ALLOCATOR_HEAP_H_

@@ -16,8 +16,14 @@ mkdir -p "${HOME}/install"
 mkdir build
 cd build
 spack load --only dependencies hermes_shm
-cmake ../ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=${HOME}/install
-cmake --build . -- -j4
+cmake ../ \
+-DCMAKE_BUILD_TYPE=Debug \
+-DHERMES_ENABLE_COVERAGE=ON \
+-DHERMES_ENABLE_DOXYGEN=ON \
+-DBUILD_HSHM_BENCHMARKS=ON \
+-DBUILD_HSHM_TESTS=ON \
+-DCMAKE_INSTALL_PREFIX=${HOME}/install
+make -j8
 
 export CXXFLAGS=-Wall
 ctest -VV

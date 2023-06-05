@@ -15,54 +15,42 @@
 #define HERMES_THREAD_RWLOCK_H_
 
 #include <atomic>
+#include <hermes_shm/constants/macros.h>
 
 namespace hshm {
 
-/** The information stored by RwLock */
-union RwLockPayload {
-  struct {
-    uint32_t r_;
-    uint32_t w_;
-  } bits_;
-  uint64_t as_int_;
-
-  /** Default constructor */
-  RwLockPayload() = default;
-
-  /** Copy constructor */
-  RwLockPayload(const RwLockPayload &other) {
-    as_int_ = other.as_int_;
-  }
-
-  /** Copy constructor. From uint64_t. */
-  explicit RwLockPayload(uint64_t other) {
-    as_int_ = other;
-  }
-
-  /** Check if write locked */
-  bool IsWriteLocked() const {
-    return bits_.w_ > 0;
-  }
-
-  /** Check if read locked */
-  bool IsReadLocked() const {
-    return bits_.r_ > 0;
-  }
+enum class RwLockMode {
+  kNone,
+  kWrite,
+  kRead,
 };
 
 /** A reader-writer lock implementation */
 struct RwLock {
-  std::atomic<uint64_t> payload_;
+  std::atomic<uint32_t> readers_;
+  std::atomic<uint32_t> writers_;
+  std::atomic<uint64_t> ticket_;
+  std::atomic<RwLockMode> mode_;
+  std::atomic<uint32_t> cur_writer_;
 #ifdef HERMES_DEBUG_LOCK
   uint32_t owner_;
 #endif
 
   /** Default constructor */
-  RwLock() : payload_(0) {}
+  RwLock()
+  : readers_(0),
+    writers_(0),
+    ticket_(0),
+    mode_(RwLockMode::kNone),
+    cur_writer_(0) {}
 
   /** Explicit constructor */
   void Init() {
-    payload_ = 0;
+    readers_ = 0;
+    writers_ = 0;
+    ticket_ = 0;
+    mode_ = RwLockMode::kNone;
+    cur_writer_ = 0;
   }
 
   /** Delete copy constructor */
@@ -70,12 +58,22 @@ struct RwLock {
 
   /** Move constructor */
   RwLock(RwLock &&other) noexcept
-  : payload_(other.payload_.load()) {}
+  : readers_(other.readers_.load()),
+    writers_(other.writers_.load()),
+    ticket_(other.ticket_.load()),
+    mode_(other.mode_.load()),
+    cur_writer_(other.cur_writer_.load()) {}
 
   /** Move assignment operator */
   RwLock& operator=(RwLock &&other) noexcept {
-    payload_ = other.payload_.load();
-    return (*this);
+    if (this != &other) {
+      readers_ = other.readers_.load();
+      writers_ = other.writers_.load();
+      ticket_ = other.ticket_.load();
+      mode_ = other.mode_.load();
+      cur_writer_ = other.cur_writer_.load();
+    }
+    return *this;
   }
 
   /** Acquire read lock */
@@ -89,6 +87,18 @@ struct RwLock {
 
   /** Release write lock */
   void WriteUnlock();
+
+ private:
+  /** Update the mode of the lock */
+  HSHM_ALWAYS_INLINE void UpdateMode(RwLockMode &mode) {
+    // When # readers is 0, there is a lag to when the mode is updated
+    // When # writers is 0, there is a lag to when the mode is updated
+    mode = mode_.load();
+    if ((readers_.load() == 0 && mode == RwLockMode::kRead) ||
+        (writers_.load() == 0 && mode == RwLockMode::kWrite)) {
+      mode_.compare_exchange_weak(mode, RwLockMode::kNone);
+    }
+  }
 };
 
 /** Acquire the read lock in a scope */

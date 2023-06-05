@@ -12,39 +12,24 @@
 
 #include "basic_test.h"
 #include "test_init.h"
-#include "hermes_shm/data_structures/ipc/mpsc_queue.h"
+#include "hermes_shm/data_structures/ipc/spsc_queue.h"
 #include "queue.h"
 
 /**
- * TEST MPSC QUEUE
+ * TEST SPSC QUEUE
  * */
 
-TEST_CASE("TestMpscQueueInt") {
+TEST_CASE("TestSpscQueueInt") {
   Allocator *alloc = alloc_g;
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceThenConsume<hipc::mpsc_queue<int>, int>(1, 1, 32, 32);
+  ProduceThenConsume<hipc::spsc_queue<int>, int>(1, 1, 32, 32);
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
 }
 
-TEST_CASE("TestMpscQueueString") {
+TEST_CASE("TestSpscQueueString") {
   Allocator *alloc = alloc_g;
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceThenConsume<hipc::mpsc_queue<hipc::string>, hipc::string>(
+  ProduceThenConsume<hipc::spsc_queue<hipc::string>, hipc::string>(
     1, 1, 32, 32);
-  REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-}
-
-TEST_CASE("TestMpscQueueIntMultiThreaded") {
-  Allocator *alloc = alloc_g;
-  REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceAndConsume<hipc::mpsc_queue<int>, int>(8, 1, 8192, 32);
-  REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-}
-
-TEST_CASE("TestMpscQueueStringMultiThreaded") {
-  Allocator *alloc = alloc_g;
-  REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceAndConsume<hipc::mpsc_queue<hipc::string>, hipc::string>(
-    8, 1, 8192, 32);
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
 }

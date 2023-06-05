@@ -12,39 +12,40 @@
 
 #include "basic_test.h"
 #include "test_init.h"
-#include "hermes_shm/data_structures/ipc/mpsc_queue.h"
+#include "hermes_shm/data_structures/ipc/ticket_queue.h"
+#include "hermes_shm/data_structures/ipc/split_ticket_queue.h"
 #include "queue.h"
 
 /**
- * TEST MPSC QUEUE
+ * TEST TICKET QUEUE
  * */
 
-TEST_CASE("TestMpscQueueInt") {
+TEST_CASE("TestTicketQueueInt") {
   Allocator *alloc = alloc_g;
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceThenConsume<hipc::mpsc_queue<int>, int>(1, 1, 32, 32);
+  ProduceThenConsume<hipc::ticket_queue<int>, int>(1, 1, 32, 32);
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
 }
 
-TEST_CASE("TestMpscQueueString") {
+TEST_CASE("TestTicketQueueIntMultiThreaded") {
   Allocator *alloc = alloc_g;
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceThenConsume<hipc::mpsc_queue<hipc::string>, hipc::string>(
-    1, 1, 32, 32);
+  ProduceAndConsume<hipc::ticket_queue<int>, int>(8, 1, 8192, 64);
+  ProduceAndConsume<hipc::ticket_queue<int>, int>(8, 8, 100000, 64);
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
 }
 
-TEST_CASE("TestMpscQueueIntMultiThreaded") {
+TEST_CASE("TestSplitTicketQueueInt") {
   Allocator *alloc = alloc_g;
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceAndConsume<hipc::mpsc_queue<int>, int>(8, 1, 8192, 32);
+  ProduceThenConsume<hipc::split_ticket_queue<int>, int>(1, 1, 32, 32);
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
 }
 
-TEST_CASE("TestMpscQueueStringMultiThreaded") {
+TEST_CASE("TestSplitTicketQueueIntMultiThreaded") {
   Allocator *alloc = alloc_g;
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
-  ProduceAndConsume<hipc::mpsc_queue<hipc::string>, hipc::string>(
-    8, 1, 8192, 32);
+  ProduceAndConsume<hipc::split_ticket_queue<int>, int>(8, 1, 8192, 64);
+  ProduceAndConsume<hipc::split_ticket_queue<int>, int>(8, 8, 100000, 64);
   REQUIRE(alloc->GetCurrentlyAllocatedSize() == 0);
 }

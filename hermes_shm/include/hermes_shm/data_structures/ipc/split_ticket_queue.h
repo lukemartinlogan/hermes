@@ -10,41 +10,38 @@
 * have access to the file, you may request a copy from help@hdfgroup.org.   *
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#ifndef HERMES_SHM_INCLUDE_HERMES_SHM_DATA_STRUCTURES_IPC_spsc_queue_templ_H_
-#define HERMES_SHM_INCLUDE_HERMES_SHM_DATA_STRUCTURES_IPC_spsc_queue_templ_H_
+#ifndef HERMES_SHM__DATA_STRUCTURES_IPC_SPLIT_TICKET_QUEUE_H_
+#define HERMES_SHM__DATA_STRUCTURES_IPC_SPLIT_TICKET_QUEUE_H_
 
 #include "hermes_shm/data_structures/ipc/internal/shm_internal.h"
-#include "hermes_shm/util/auto_trace.h"
 #include "hermes_shm/thread/lock.h"
 #include "vector.h"
-#include "pair.h"
-#include "_queue.h"
+#include "ticket_queue.h"
 
 namespace hshm::ipc {
 
-/** Forward declaration of spsc_queue_templ */
-template<typename T, bool EXTENSIBLE>
-class spsc_queue_templ;
+/** Forward declaration of split_ticket_queue */
+template<typename T>
+class split_ticket_queue;
 
 /**
- * MACROS used to simplify the spsc_queue_templ namespace
+ * MACROS used to simplify the split_ticket_queue namespace
  * Used as inputs to the SHM_CONTAINER_TEMPLATE
  * */
-#define CLASS_NAME spsc_queue_templ
-#define TYPED_CLASS spsc_queue_templ<T, EXTENSIBLE>
-#define TYPED_HEADER ShmHeader<spsc_queue_templ<T, EXTENSIBLE>>
+#define CLASS_NAME split_ticket_queue
+#define TYPED_CLASS split_ticket_queue<T>
+#define TYPED_HEADER ShmHeader<split_ticket_queue<T>>
 
 /**
- * A queue optimized for multiple producers (emplace) with a single
- * consumer (pop).
+ * A MPMC queue for allocating tickets. Handles concurrency
+ * without blocking.
  * */
-template<typename T, bool EXTENSIBLE>
-class spsc_queue_templ : public ShmContainer {
+template<typename T>
+class split_ticket_queue : public ShmContainer {
  public:
   SHM_CONTAINER_TEMPLATE((CLASS_NAME), (TYPED_CLASS))
-  ShmArchive<vector<T>> queue_;
-  _qtok_t tail_;
-  _qtok_t head_;
+  ShmArchive<vector<ticket_queue<T>>> splits_;
+  std::atomic<uint16_t> rr_tail_, rr_head_;
 
  public:
   /**====================================
@@ -52,10 +49,14 @@ class spsc_queue_templ : public ShmContainer {
    * ===================================*/
 
   /** SHM constructor. Default. */
-  explicit spsc_queue_templ(Allocator *alloc,
-                            size_t depth = 1024) {
+  explicit split_ticket_queue(Allocator *alloc,
+                              size_t depth_per_split = 1024,
+                              size_t split = 0) {
     shm_init_container(alloc);
-    HSHM_MAKE_AR(queue_, GetAllocator(), depth)
+    if (split == 0) {
+      split = HERMES_SYSTEM_INFO->ncpu_;
+    }
+    HSHM_MAKE_AR(splits_, GetAllocator(), split, depth_per_split);
     SetNull();
   }
 
@@ -64,15 +65,15 @@ class spsc_queue_templ : public ShmContainer {
    * ===================================*/
 
   /** SHM copy constructor */
-  explicit spsc_queue_templ(Allocator *alloc,
-                            const spsc_queue_templ &other) {
+  explicit split_ticket_queue(Allocator *alloc,
+                              const split_ticket_queue &other) {
     shm_init_container(alloc);
     SetNull();
     shm_strong_copy_construct_and_op(other);
   }
 
   /** SHM copy assignment operator */
-  spsc_queue_templ& operator=(const spsc_queue_templ &other) {
+  split_ticket_queue& operator=(const split_ticket_queue &other) {
     if (this != &other) {
       shm_destroy();
       shm_strong_copy_construct_and_op(other);
@@ -81,10 +82,8 @@ class spsc_queue_templ : public ShmContainer {
   }
 
   /** SHM copy constructor + operator main */
-  void shm_strong_copy_construct_and_op(const spsc_queue_templ &other) {
-    head_ = other.head_;
-    tail_ = other.tail_;
-    (*queue_) = (*other.queue_);
+  void shm_strong_copy_construct_and_op(const split_ticket_queue &other) {
+    (*splits_) = (*other.splits_);
   }
 
   /**====================================
@@ -92,13 +91,11 @@ class spsc_queue_templ : public ShmContainer {
    * ===================================*/
 
   /** SHM move constructor. */
-  spsc_queue_templ(Allocator *alloc,
-                   spsc_queue_templ &&other) noexcept {
+  split_ticket_queue(Allocator *alloc,
+                     split_ticket_queue &&other) noexcept {
     shm_init_container(alloc);
     if (GetAllocator() == other.GetAllocator()) {
-      head_ = other.head_;
-      tail_ = other.tail_;
-      (*queue_) = std::move(*other.queue_);
+      (*splits_) = std::move(*other.splits_);
       other.SetNull();
     } else {
       shm_strong_copy_construct_and_op(other);
@@ -107,13 +104,11 @@ class spsc_queue_templ : public ShmContainer {
   }
 
   /** SHM move assignment operator. */
-  spsc_queue_templ& operator=(spsc_queue_templ &&other) noexcept {
+  split_ticket_queue& operator=(split_ticket_queue &&other) noexcept {
     if (this != &other) {
       shm_destroy();
       if (GetAllocator() == other.GetAllocator()) {
-        head_ = other.head_;
-        tail_ = other.tail_;
-        (*queue_) = std::move(*other.queue_);
+        (*splits_) = std::move(*other.splits_);
         other.SetNull();
       } else {
         shm_strong_copy_construct_and_op(other);
@@ -129,64 +124,65 @@ class spsc_queue_templ : public ShmContainer {
 
   /** SHM destructor.  */
   void shm_destroy_main() {
-    (*queue_).shm_destroy();
+    (*splits_).shm_destroy();
   }
 
   /** Check if the list is empty */
   bool IsNull() const {
-    return (*queue_).IsNull();
+    return (*splits_).IsNull();
   }
 
   /** Sets this list as empty */
   void SetNull() {
-    head_ = 0;
-    tail_ = 0;
+    rr_tail_ = 0;
+    rr_head_ = 0;
   }
 
   /**====================================
-   * spsc Queue Methods
+   * ticket Queue Methods
    * ===================================*/
 
-  /** Construct an element at \a pos position in the list */
+  /** Construct an element at \a pos position in the queue */
   template<typename ...Args>
-  qtok_t emplace(Args&&... args) {
-    _qtok_t entry_tok = tail_;
-    uint32_t idx = entry_tok % (*queue_).size();
-    auto iter = (*queue_).begin() + idx;
-    (*queue_).replace(iter, std::forward<Args>(args)...);
-    tail_ += 1;
-    return qtok_t(entry_tok);
+  qtok_t emplace(T &tkt) {
+    uint16_t rr = rr_tail_.fetch_add(1);
+    auto &splits = (*splits_);
+    size_t num_splits = splits.size();
+    uint16_t qid_start = rr % num_splits;
+    for (size_t i = 0; i < num_splits; ++i) {
+      uint32_t qid = (qid_start + i) % num_splits;
+      ticket_queue<T> &queue = (*splits_)[qid];
+      qtok_t qtok = queue.emplace(tkt);
+      if (!qtok.IsNull()) {
+        return qtok;
+      }
+    }
+    return qtok_t::GetNull();
   }
 
  public:
-  /** Consumer pops the head object */
-  qtok_t pop(T &val) {
-    // Don't pop if there's no entries
-    _qtok_t head = head_;
-    _qtok_t tail = tail_;
-    if (head >= tail) {
-      return qtok_t::GetNull();
+  /** Pop an element from the queue */
+  qtok_t pop(T &tkt) {
+    uint16_t rr = rr_head_.fetch_add(1);
+    auto &splits = (*splits_);
+    size_t num_splits = splits.size();
+    uint16_t qid_start = rr % num_splits;
+    for (size_t i = 0; i < num_splits; ++i) {
+      uint32_t qid = (qid_start + i) % num_splits;
+      ticket_queue<T> &queue = (*splits_)[qid];
+      qtok_t qtok = queue.pop(tkt);
+      if (!qtok.IsNull()) {
+        return qtok;
+      }
     }
-
-    // Pop the element
-    _qtok_t idx = head % (*queue_).size();
-    T &entry = (*queue_)[idx];
-    (val) = std::move(entry);
-    head_ += 1;
-    return qtok_t(head);
+    return qtok_t::GetNull();
   }
 };
 
-template<typename T>
-using spsc_queue_ext = spsc_queue_templ<T, true>;
-
-template<typename T>
-using spsc_queue = spsc_queue_templ<T, false>;
-
 }  // namespace hshm::ipc
 
-#undef CLASS_NAME
-#undef TYPED_CLASS
 #undef TYPED_HEADER
+#undef TYPED_CLASS
+#undef CLASS_NAME
 
-#endif  // HERMES_SHM_INCLUDE_HERMES_SHM_DATA_STRUCTURES_IPC_spsc_queue_templ_H_
+#endif  // HERMES_SHM__DATA_STRUCTURES_IPC_SPLIT_TICKET_QUEUE_H_

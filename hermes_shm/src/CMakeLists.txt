@@ -51,4 +51,3 @@ endif()
 if(HERMES_ENABLE_COVERAGE)
     set_coverage_flags(hermes_shm_data_structures)
 endif()
-
