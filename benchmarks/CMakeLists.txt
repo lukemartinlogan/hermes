@@ -6,7 +6,7 @@ include_directories(
 )
 
 set(BENCHMARKS
-        api_bench
+        hermes_api_bench
         memcpy_bench
         reorganize)
 
