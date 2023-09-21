@@ -296,6 +296,7 @@ int main(int argc, char **argv) {
     DeleteBlobOneBucket(hermes, nprocs, rank, blobs_per_rank);
   }
 
+  MPI_Barrier(MPI_COMM_WORLD);
   hermes->Finalize();
   MPI_Finalize();
 }
