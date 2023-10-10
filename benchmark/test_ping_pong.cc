@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
   // we are getting the "header" of the allocator
   hipc::Allocator *alloc = alloc_g;
   hipc::Pointer *header = alloc->GetCustomHeader<hipc::Pointer>();
+  HIPRINT("Rank: {} has begun", rank)
 
   // Make the queue uptr
   hipc::uptr<hipc::mpsc_queue<hipc::Pointer>> queue_;
