@@ -63,6 +63,7 @@ void MainPretest() {
 }
 
 int main(int argc, char **argv) {
+  MPI_Init(&argc, &argv);
   MainPretest();
   
   int rank;
@@ -119,4 +120,5 @@ int main(int argc, char **argv) {
   // Rank 0 doesn't exit before Rank 1
   // The uptr frees data when rank 0 exits.
   MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Finalize();
 }
