@@ -37,6 +37,12 @@ target_link_libraries(hermes_api_bench
         ${Hermes_CLIENT_LIBRARIES} hermes
         Catch2::Catch2 MPI::MPI_CXX)
 
+add_executable(test_ping_pong_exec
+        test_ping_pong.cc)
+target_link_libraries(test_ping_pong_exec
+        ${Hermes_CLIENT_LIBRARIES} hermes
+        Catch2::Catch2 MPI::MPI_CXX)
+
 #------------------------------------------------------------------------------
 # Test Cases
 #------------------------------------------------------------------------------

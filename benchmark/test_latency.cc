@@ -210,14 +210,15 @@ TEST_CASE("TestSpawnJoinArgoThread") {
 void TestWorkerIterationLatency(u32 num_queues, u32 num_lanes) {
   LABSTOR_RUNTIME->Create();
 
+  u32 ops = 1024;
   labstor::Worker worker(124);
   std::vector<hipc::uptr<labstor::MultiQueue>> queues;
   for (u32 i = 0; i < num_queues; ++i) {
     labstor::QueueId qid(0, i + 1);
     std::vector<PriorityInfo> queue_info = {
-        {1, num_lanes, 256, 0},
-        {1, num_lanes, 256, QUEUE_LONG_RUNNING},
-        {num_lanes, num_lanes, 256, QUEUE_LOW_LATENCY},
+        {1, num_lanes, ops, 0},
+        {1, num_lanes, ops, QUEUE_LONG_RUNNING},
+        {num_lanes, num_lanes, ops, QUEUE_LOW_LATENCY},
     };
     auto queue = hipc::make_uptr<labstor::MultiQueue>(
         qid, queue_info);
@@ -235,14 +236,25 @@ void TestWorkerIterationLatency(u32 num_queues, u32 num_lanes) {
   hshm::Timer t;
   t.Resume();
   // size_t ops = (1 << 20);
-  size_t ops = 256;
+  std::queue<std::pair<int, int>> stdqueue;
   for (size_t i = 0; i < ops; ++i) {
     hipc::LPointer<labstor::small_message::MdPushTask> task;
     labstor::TaskNode task_node(labstor::TaskId((u32)0, (u64)i));
+//    task = LABSTOR_CLIENT->NewTask<labstor::small_message::MdPushTask>(
+//        task_node, labstor::DomainId::GetLocal(), client.id_);
     task = client.AsyncMdPushEmplace(queues[num_queues - 1].get(),
                                      task_node,
                                      labstor::DomainId::GetLocal());
-    // worker.Run();
+    worker.Run();
+//    size_t count = 0;
+//    for (labstor::WorkEntry &work_entry : worker.work_queue_) {
+//      count += (size_t)work_entry.lane_;
+//      stdqueue.push(std::pair(0, 0));
+//      labstor::LaneData *entry;
+//      if (work_entry.lane_->peek(entry, 0).IsNull()) {
+//        continue;
+//      }
+//    }
     LABSTOR_CLIENT->DelTask(task);
   }
   t.Pause();
