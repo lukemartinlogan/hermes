@@ -89,6 +89,7 @@ int main(int argc, char **argv) {
     // Affine to CPU 1
     ProcessAffiner::SetCpuAffinity(getpid(), 1);
   }
+  HIPRINT("Rank: {} has started", rank)
 
   size_t ops = (1 << 16);
   if (rank == 0) {
@@ -100,8 +101,9 @@ int main(int argc, char **argv) {
       (*obj.ptr_) = 0;
       queue_->emplace(obj.shm_);
       do {
-        queue_->pop();
+        sched_yield();
       } while(!(*obj.ptr_));
+      queue_->pop();
       alloc->FreeLocalPtr(obj);
     }
     t.Pause();
