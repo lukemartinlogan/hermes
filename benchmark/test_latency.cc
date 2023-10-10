@@ -273,7 +273,7 @@ TEST_CASE("TestRoundTripLatency") {
   hshm::Timer t;
 
   int pid = getpid();
-  ProcessAffiner::SetCpuAffinity(pid, 10);
+  ProcessAffiner::SetCpuAffinity(pid, 8);
 
   t.Resume();
   size_t ops = (1 << 8);
