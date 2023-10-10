@@ -68,7 +68,8 @@ void Worker::PollGrouped(WorkEntry &work_entry) {
       continue;
     }
     // Attempt to run the task if it's ready and runnable
-    bool is_remote = task->domain_id_.IsRemote(LABSTOR_RPC->GetNumHosts(), LABSTOR_CLIENT->node_id_);
+    // bool is_remote = task->domain_id_.IsRemote(LABSTOR_RPC->GetNumHosts(), LABSTOR_CLIENT->node_id_);
+    bool is_remote = false;
     if (!task->IsRunDisabled() &&
         CheckTaskGroup(task, exec, work_entry.lane_id_, task->task_node_, is_remote) &&
         task->ShouldRun(work_entry.cur_time_)) {
