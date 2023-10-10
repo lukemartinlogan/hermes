@@ -276,7 +276,7 @@ TEST_CASE("TestRoundTripLatency") {
   ProcessAffiner::SetCpuAffinity(pid, 8);
 
   t.Resume();
-  size_t ops = (1 << 15);
+  size_t ops = (1 << 20);
   // size_t ops = 1024;
   for (size_t i = 0; i < ops; ++i) {
     // client.MdPushRoot(labstor::DomainId::GetLocal());
