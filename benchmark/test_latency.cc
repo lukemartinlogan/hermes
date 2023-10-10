@@ -210,20 +210,23 @@ TEST_CASE("TestSpawnJoinArgoThread") {
 void TestWorkerIterationLatency(u32 num_queues, u32 num_lanes) {
   LABSTOR_RUNTIME->Create();
 
-  labstor::Worker worker(0);
-//  std::vector<hipc::uptr<labstor::MultiQueue>> queues;
-//  for (u32 i = 0; i < num_queues; ++i) {
-//    labstor::QueueId qid(0, i + 1);
-//    std::vector<PriorityInfo> queue_info = {
-//        {num_lanes, num_lanes, 256, 0}
-//    };
-//    auto queue = hipc::make_uptr<labstor::MultiQueue>(
-//        qid, queue_info);
-//    queues.emplace_back(std::move(queue));
-//    for (u32 j = 0; j < num_lanes; ++j) {
-//      worker.PollQueues({{0, j, queue.get()}});
-//    }
-//  }
+  labstor::Worker worker(124);
+  std::vector<hipc::uptr<labstor::MultiQueue>> queues;
+  for (u32 i = 0; i < num_queues; ++i) {
+    labstor::QueueId qid(0, i + 1);
+    std::vector<PriorityInfo> queue_info = {
+        {1, num_lanes, 256, 0},
+        {1, num_lanes, 256, QUEUE_LONG_RUNNING},
+        {num_lanes, num_lanes, 256, QUEUE_LOW_LATENCY},
+    };
+    auto queue = hipc::make_uptr<labstor::MultiQueue>(
+        qid, queue_info);
+    queues.emplace_back(std::move(queue));
+    for (u32 j = 0; j < num_lanes; ++j) {
+      worker.PollQueues({{0, j, queue.get()}});
+    }
+  }
+  worker._PollQueues();
 
   labstor::small_message::Client client;
   LABSTOR_ADMIN->RegisterTaskLibRoot(labstor::DomainId::GetLocal(), "small_message");\
@@ -236,11 +239,9 @@ void TestWorkerIterationLatency(u32 num_queues, u32 num_lanes) {
   for (size_t i = 0; i < ops; ++i) {
     hipc::LPointer<labstor::small_message::MdPushTask> task;
     labstor::TaskNode task_node(labstor::TaskId((u32)0, (u64)i));
-//    task = client.AsyncMdPushEmplace(queues[num_queues - 1].get(),
-//                                     task_node,
-//                                     labstor::DomainId::GetLocal());
-    task = client.AsyncMdPush(task_node,
-                              labstor::DomainId::GetLocal());
+    task = client.AsyncMdPushEmplace(queues[num_queues - 1].get(),
+                                     task_node,
+                                     labstor::DomainId::GetLocal());
     worker.Run();
     LABSTOR_CLIENT->DelTask(task);
   }
@@ -253,9 +254,9 @@ void TestWorkerIterationLatency(u32 num_queues, u32 num_lanes) {
 TEST_CASE("TestWorkerLatency") {
   // TRANSPARENT_LABSTOR();
   TestWorkerIterationLatency(1, 16);
-//  TestWorkerIterationLatency(5, 16);
-//  TestWorkerIterationLatency(10, 16);
-//  TestWorkerIterationLatency(15, 16);
+  TestWorkerIterationLatency(5, 16);
+  TestWorkerIterationLatency(10, 16);
+  TestWorkerIterationLatency(15, 16);
 }
 
 /** Time to process a request */
