@@ -64,6 +64,7 @@ void MainPretest() {
 
 int main(int argc, char **argv) {
   int rank;
+  HIPRINT("Rank has begun")
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   HIPRINT("Rank: {} has begun", rank)
