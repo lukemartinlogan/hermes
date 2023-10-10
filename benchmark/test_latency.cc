@@ -253,7 +253,7 @@ TEST_CASE("TestWorkerLatency") {
 /** Time to process a request */
 TEST_CASE("TestRoundTripLatency") {
   TRANSPARENT_LABSTOR();
-  HERMES->ClientInit();
+  // HERMES->ClientInit();
   labstor::small_message::Client client;
   LABSTOR_ADMIN->RegisterTaskLibRoot(labstor::DomainId::GetLocal(), "small_message");
 //  int count = 25;
