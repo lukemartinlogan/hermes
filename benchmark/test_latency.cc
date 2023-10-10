@@ -249,7 +249,7 @@ void TestWorkerIterationLatency(u32 num_queues, u32 num_lanes) {
 
 /** Time for worker to process a request */
 TEST_CASE("TestWorkerLatency") {
-  TRANSPARENT_LABSTOR();
+  // TRANSPARENT_LABSTOR();
   TestWorkerIterationLatency(1, 16);
   TestWorkerIterationLatency(5, 16);
   TestWorkerIterationLatency(10, 16);
