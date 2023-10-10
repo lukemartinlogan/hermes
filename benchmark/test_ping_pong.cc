@@ -63,11 +63,12 @@ void MainPretest() {
 }
 
 int main(int argc, char **argv) {
-  MPI_Init(&argc, &argv);
-  MainPretest();
-  
   int rank;
+  MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  HIPRINT("Rank: {} has begun", rank)
+
+  MainPretest();
   // The allocator was initialized in test_init.c
   // we are getting the "header" of the allocator
   hipc::Allocator *alloc = alloc_g;
