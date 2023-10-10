@@ -192,6 +192,9 @@ class Server : public TaskLib {
 
   /** Get or create a tag */
   void GetOrCreateTag(GetOrCreateTagTask *task, RunContext &rctx) {
+    task->SetModuleComplete();
+    return;
+
     TagId tag_id;
     HILOG(kDebug, "Creating a tag on lane {}", rctx.lane_id_);
 
