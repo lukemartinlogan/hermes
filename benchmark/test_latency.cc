@@ -279,14 +279,7 @@ TEST_CASE("TestRoundTripLatency") {
   size_t ops = (1 << 20);
   // size_t ops = 1024;
   for (size_t i = 0; i < ops; ++i) {
-    // client.MdPushRoot(labstor::DomainId::GetLocal());
-    auto task_t = LABSTOR_CLIENT->NewTaskRoot<labstor::Task>();
-    LPointer<labstor::small_message::MdPushTask> task =
-    client.AsyncMdPush(LABSTOR_CLIENT->MakeTaskNodeId(),
-                       labstor::DomainId::GetLocal());
-    task->Wait();
-    LABSTOR_CLIENT->DelTask(task);
-    LABSTOR_CLIENT->DelTask(task_t);
+    client.MdPushRoot(labstor::DomainId::GetLocal());
   }
   t.Pause();
 
