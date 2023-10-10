@@ -60,6 +60,8 @@ void Worker::PollGrouped(WorkEntry &work_entry) {
     // Get the task state
     TaskState *&exec = rctx.exec_;
     exec = LABSTOR_TASK_REGISTRY->GetTaskState(task->task_state_);
+    exec = LABSTOR_TASK_REGISTRY->GetTaskState(task->task_state_);
+    exec = LABSTOR_TASK_REGISTRY->GetTaskState(task->task_state_);
     if (!exec) {
       HELOG(kFatal, "(node {}) Could not find the task state: {}",
             LABSTOR_CLIENT->node_id_, task->task_state_);
