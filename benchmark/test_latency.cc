@@ -35,6 +35,7 @@ TEST_CASE("TestGetQueue") {
 
 /** Single-thread performance of allocating + freeing tasks */
 TEST_CASE("TestHshmAllocateFree") {
+  TRANSPARENT_LABSTOR();
   hshm::Timer t;
   t.Resume();
   size_t ops = (1 << 20);
@@ -55,6 +56,7 @@ TEST_CASE("TestHshmAllocateFree") {
 
 /** Single-thread performance of emplacing, and popping a mpsc_ptr_queue */
 TEST_CASE("TestPointerQueueEmplacePop") {
+  TRANSPARENT_LABSTOR();
   size_t ops = (1 << 20);
   auto queue_ptr = hipc::make_uptr<hipc::mpsc_ptr_queue<hipc::Pointer>>(ops);
   auto queue = queue_ptr.get();
@@ -73,6 +75,7 @@ TEST_CASE("TestPointerQueueEmplacePop") {
 
 /** Single-thread performance of empacling + popping vec<mpsc_ptr_queue> */
 TEST_CASE("TestPointerQueueVecEmplacePop") {
+  TRANSPARENT_LABSTOR();
   auto queues_ptr = hipc::make_uptr<hipc::vector<hipc::mpsc_ptr_queue<hipc::Pointer>>>(16);
   auto queues = queues_ptr.get();
   hipc::Pointer p;
@@ -92,6 +95,7 @@ TEST_CASE("TestPointerQueueVecEmplacePop") {
 
 /** Single-thread performance of getting, emplacing, and popping a queue */
 TEST_CASE("TestHshmQueueEmplacePop") {
+  TRANSPARENT_LABSTOR();
   labstor::QueueId qid(0, 3);
   u32 ops = (1 << 20);
   std::vector<PriorityInfo> queue_info = {
@@ -118,6 +122,7 @@ TEST_CASE("TestHshmQueueEmplacePop") {
 
 /** Single-thread performance of getting a lane from a queue */
 TEST_CASE("TestHshmQueueGetLane") {
+  TRANSPARENT_LABSTOR();
   labstor::QueueId qid(0, 3);
   std::vector<PriorityInfo> queue_info = {
       {16, 16, 256, 0}
@@ -139,6 +144,7 @@ TEST_CASE("TestHshmQueueGetLane") {
 
 /** Single-thread performance of getting, emplacing, and popping a queue */
 TEST_CASE("TestHshmQueueAllocateEmplacePop") {
+  TRANSPARENT_LABSTOR();
   labstor::QueueId qid(0, 3);
   std::vector<PriorityInfo> queue_info = {
       {16, 16, 256, 0}
