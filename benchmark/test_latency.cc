@@ -276,10 +276,15 @@ TEST_CASE("TestRoundTripLatency") {
   ProcessAffiner::SetCpuAffinity(pid, 10);
 
   t.Resume();
-  size_t ops = (1 << 20);
+  size_t ops = (1 << 15);
   // size_t ops = 1024;
   for (size_t i = 0; i < ops; ++i) {
-    client.MdPushRoot(labstor::DomainId::GetLocal());
+    // client.MdPushRoot(labstor::DomainId::GetLocal());
+    LPointer<labstor::small_message::MdPushTask> task =
+    client.AsyncMdPush(LABSTOR_CLIENT->MakeTaskNodeId(),
+                       labstor::DomainId::GetLocal());
+    task->Wait();
+    LABSTOR_CLIENT->DelTask(task);
   }
   t.Pause();
 
