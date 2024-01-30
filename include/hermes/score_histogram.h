@@ -25,6 +25,12 @@ struct HistEntry {
   /** Default constructor */
   HistEntry() : x_(0) {}
 
+  /** Serialize */
+  template<typename Ar>
+  void serialize(Ar &ar) {
+    ar & x_;
+  }
+
   /** Constructor */
   explicit HistEntry(int x) : x_(x) {}
 
@@ -61,8 +67,15 @@ class Histogram {
   Histogram() : histogram_(), count_(0) {}
 
   /** Copy constructor */
-  Histogram(const Histogram &other) : histogram_(other.histogram_),
-                                      count_(other.count_.load()) {}
+  Histogram(const Histogram &other)
+  : histogram_(other.histogram_), count_(other.count_.load()) {}
+
+  /** Serialize */
+  template<typename Ar>
+  void serialize(Ar &ar) {
+    ar & histogram_;
+    ar & count_;
+  }
 
   /** Copy operator */
   Histogram &operator=(const Histogram &other) {

@@ -54,10 +54,12 @@ class Server : public TaskLib, public bdev::Server {
 
   /** Allocate space from bdev */
   void Allocate(AllocateTask *task, RunContext &rctx) {
-    alloc_.Allocate(task->size_, *task->buffers_, task->alloc_size_);
+    std::vector<BufferInfo> buffers;
+    alloc_.Allocate(task->size_, buffers, task->alloc_size_);
     HILOG(kDebug, "Allocated {}/{} bytes ({})", task->alloc_size_, task->size_, path_);
     rem_cap_ -= task->alloc_size_;
     score_hist_.Increment(task->score_);
+    (*task->buffers_) = buffers;
     task->SetModuleComplete();
   }
   void MonitorAllocate(u32 mode, AllocateTask *task, RunContext &rctx) {
@@ -65,7 +67,8 @@ class Server : public TaskLib, public bdev::Server {
 
   /** Free space from bdev */
   void Free(FreeTask *task, RunContext &rctx) {
-    rem_cap_ += alloc_.Free(task->buffers_);
+    std::vector<BufferInfo> buffers = task->buffers_->vec();
+    rem_cap_ += alloc_.Free(buffers);
     score_hist_.Decrement(task->score_);
     task->SetModuleComplete();
   }
@@ -115,7 +118,8 @@ class Server : public TaskLib, public bdev::Server {
       }
     }
 #else
-    ssize_t count = pwrite64(fd_, task->buf_, task->size_, (off64_t)task->disk_off_);
+    char *data = HERMES_MEMORY_MANAGER->Convert<char>(task->data_);
+    ssize_t count = pwrite64(fd_, data, task->size_, (off64_t)task->disk_off_);
     if (count != task->size_) {
       HELOG(kError, "BORG: wrote {} bytes, but expected {}: {}",
             count, task->size_, strerror(errno));
@@ -169,7 +173,8 @@ class Server : public TaskLib, public bdev::Server {
       }
     }
 #else
-    ssize_t count = pread64(fd_, task->buf_, task->size_, (off64_t)task->disk_off_);
+    char *data = HERMES_MEMORY_MANAGER->Convert<char>(task->data_);
+    ssize_t count = pread64(fd_, data, task->size_, (off64_t)task->disk_off_);
     if (count != task->size_) {
       HELOG(kError, "BORG: read {} bytes, but expected {}",
             count, task->size_);

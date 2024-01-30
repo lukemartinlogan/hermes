@@ -123,7 +123,7 @@ class Client : public TaskLibClient {
   HSHM_ALWAYS_INLINE
   void AsyncWriteConstruct(WriteTask *task,
                            const TaskNode &task_node,
-                           const char *data, size_t off, size_t size) {
+                           const hipc::Pointer &data, size_t off, size_t size) {
     HRUN_CLIENT->ConstructTask<WriteTask>(
         task, task_node, domain_id_, id_, data, off, size);
   }
@@ -133,7 +133,7 @@ class Client : public TaskLibClient {
   HSHM_ALWAYS_INLINE
   void AsyncReadConstruct(ReadTask *task,
                           const TaskNode &task_node,
-                          char *data, size_t off, size_t size) {
+                          const hipc::Pointer &data, size_t off, size_t size) {
     HRUN_CLIENT->ConstructTask<ReadTask>(
         task, task_node, domain_id_, id_, data, off, size);
   }

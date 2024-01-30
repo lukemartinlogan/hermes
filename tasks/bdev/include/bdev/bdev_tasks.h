@@ -71,12 +71,12 @@ struct DestructTask : public DestroyTaskStateTask {
 };
 
 /**
- * A custom task in bdev
+ * A task to allocate buffers from a node
  * */
-struct AllocateTask : public Task, TaskFlags<TF_LOCAL> {
+struct AllocateTask : public Task, TaskFlags<TF_SRL_SYM> {
   IN size_t size_;  /**< Size in buf */
   IN float score_;  /**< Score of the blob allocating stuff */
-  OUT std::vector<BufferInfo> *buffers_;
+  OUT hipc::ShmArchive<hipc::vector<BufferInfo>> buffers_;
   OUT size_t alloc_size_;
 
   /** SHM default constructor */
@@ -104,7 +104,25 @@ struct AllocateTask : public Task, TaskFlags<TF_LOCAL> {
     // Free params
     size_ = size;
     score_ = score;
-    buffers_ = buffers;
+    HSHM_MAKE_AR(buffers_, alloc, *buffers);
+  }
+
+  /** Destructor */
+  ~AllocateTask() {
+    HSHM_DESTROY_AR(buffers_);
+  }
+
+  /** (De)serialize message call */
+  template<typename Ar>
+  void SerializeStart(Ar &ar) {
+    task_serialize<Ar>(ar);
+    ar(size_, score_, buffers_);
+  }
+
+  /** (De)serialize message return */
+  template<typename Ar>
+  void SerializeEnd(u32 replica, Ar &ar) {
+    ar(buffers_);
   }
 
   /** Create group */
@@ -115,10 +133,10 @@ struct AllocateTask : public Task, TaskFlags<TF_LOCAL> {
 };
 
 /**
- * A custom task in bdev
+ * A task to free buffers from a node
  * */
-struct FreeTask : public Task, TaskFlags<TF_LOCAL> {
-  IN std::vector<BufferInfo> buffers_;
+struct FreeTask : public Task, TaskFlags<TF_SRL_SYM> {
+  IN hipc::ShmArchive<hipc::vector<BufferInfo>> buffers_;
   IN float score_;
 
   /** SHM default constructor */
@@ -147,8 +165,25 @@ struct FreeTask : public Task, TaskFlags<TF_LOCAL> {
     domain_id_ = domain_id;
 
     // Free params
-    buffers_ = buffers;
+    HSHM_MAKE_AR(buffers_, alloc, buffers);
     score_ = score;
+  }
+
+  /** Destructor */
+  ~FreeTask() {
+    HSHM_DESTROY_AR(buffers_);
+  }
+
+  /** (De)serialize message call */
+  template<typename Ar>
+  void SerializeStart(Ar &ar) {
+    task_serialize<Ar>(ar);
+    ar(score_, buffers_);
+  }
+
+  /** (De)serialize message return */
+  template<typename Ar>
+  void SerializeEnd(u32 replica, Ar &ar) {
   }
 
   /** Create group */
@@ -159,10 +194,10 @@ struct FreeTask : public Task, TaskFlags<TF_LOCAL> {
 };
 
 /**
- * A custom task in bdev
+ * A task to write to buffers on a node
  * */
-struct WriteTask : public Task, TaskFlags<TF_LOCAL> {
-  IN const char *buf_;    /**< Data in memory */
+struct WriteTask : public Task, TaskFlags<TF_SRL_ASYM_START | TF_SRL_SYM_END> {
+  IN hipc::Pointer data_;    /**< Data in memory */
   IN size_t disk_off_;    /**< Offset on disk */
   IN size_t size_;        /**< Size in buf */
   TEMP int phase_ = 0;
@@ -178,7 +213,7 @@ struct WriteTask : public Task, TaskFlags<TF_LOCAL> {
             const TaskNode &task_node,
             const DomainId &domain_id,
             const TaskStateId &state_id,
-            const char *buf,
+            const hipc::Pointer &data,
             size_t disk_off,
             size_t size) : Task(alloc) {
     // Initialize task
@@ -197,9 +232,35 @@ struct WriteTask : public Task, TaskFlags<TF_LOCAL> {
     counter += 1;
 
     // Free params
-    buf_ = buf;
+    data_ = data;
     disk_off_ = disk_off;
     size_ = size;
+  }
+
+  /** (De)serialize message call */
+  template<typename Ar>
+  void SaveStart(Ar &ar) {
+    DataTransfer xfer(DT_RECEIVER_READ,
+                      HERMES_MEMORY_MANAGER->Convert<char>(data_),
+                      size_, domain_id_);
+    task_serialize<Ar>(ar);
+    ar & xfer;
+    ar(disk_off_, size_);
+  }
+
+  /** Deserialize message call */
+  template<typename Ar>
+  void LoadStart(Ar &ar) {
+    DataTransfer xfer;
+    task_serialize<Ar>(ar);
+    ar & xfer;
+    data_ = HERMES_MEMORY_MANAGER->Convert<void, hipc::Pointer>(xfer.data_);
+    ar(disk_off_, size_);
+  }
+
+  /** (De)serialize message return */
+  template<typename Ar>
+  void SerializeEnd(u32 replica, Ar &ar) {
   }
 
   /** Create group */
@@ -210,10 +271,10 @@ struct WriteTask : public Task, TaskFlags<TF_LOCAL> {
 };
 
 /**
- * A custom task in bdev
+ * A task to read from buffers on a node
  * */
-struct ReadTask : public Task, TaskFlags<TF_LOCAL> {
-  IN char *buf_;         /**< Data in memory */
+struct ReadTask : public Task, TaskFlags<TF_SRL_ASYM_START | TF_SRL_SYM_END> {
+  IN hipc::Pointer data_;         /**< Data in memory */
   IN size_t disk_off_;   /**< Offset on disk */
   IN size_t size_;       /**< Size in disk buf */
   TEMP int phase_ = 0;
@@ -229,7 +290,7 @@ struct ReadTask : public Task, TaskFlags<TF_LOCAL> {
            const TaskNode &task_node,
            const DomainId &domain_id,
            const TaskStateId &state_id,
-           char *buf,
+           const hipc::Pointer &data,
            size_t disk_off,
            size_t size) : Task(alloc) {
     static int counter = 0;
@@ -248,9 +309,35 @@ struct ReadTask : public Task, TaskFlags<TF_LOCAL> {
     domain_id_ = domain_id;
 
     // Free params
-    buf_ = buf;
+    data_ = data;
     disk_off_ = disk_off;
     size_ = size;
+  }
+
+  /** (De)serialize message call */
+  template<typename Ar>
+  void SaveStart(Ar &ar) {
+    DataTransfer xfer(DT_RECEIVER_WRITE,
+                      HERMES_MEMORY_MANAGER->Convert<char>(data_),
+                      size_, domain_id_);
+    task_serialize<Ar>(ar);
+    ar & xfer;
+    ar(disk_off_, size_);
+  }
+
+  /** Deserialize message call */
+  template<typename Ar>
+  void LoadStart(Ar &ar) {
+    DataTransfer xfer;
+    task_serialize<Ar>(ar);
+    ar & xfer;
+    data_ = HERMES_MEMORY_MANAGER->Convert<void, hipc::Pointer>(xfer.data_);
+    ar(disk_off_, size_);
+  }
+
+  /** (De)serialize message return */
+  template<typename Ar>
+  void SerializeEnd(u32 replica, Ar &ar) {
   }
 
   /** Create group */
@@ -261,7 +348,7 @@ struct ReadTask : public Task, TaskFlags<TF_LOCAL> {
 };
 
 /** A task to monitor bdev statistics */
-struct StatBdevTask : public Task, TaskFlags<TF_LOCAL> {
+struct StatBdevTask : public Task, TaskFlags<TF_SRL_SYM> {
   OUT size_t rem_cap_;  /**< Remaining capacity of the target */
   OUT Histogram score_hist_;  /**< Score distribution */
 
@@ -292,6 +379,18 @@ struct StatBdevTask : public Task, TaskFlags<TF_LOCAL> {
     score_hist_.Resize(10);
   }
 
+  /** (De)serialize message call */
+  template<typename Ar>
+  void SerializeStart(Ar &ar) {
+    task_serialize<Ar>(ar);
+  }
+
+  /** (De)serialize message return */
+  template<typename Ar>
+  void SerializeEnd(u32 replica, Ar &ar) {
+    ar(rem_cap_, score_hist_);
+  }
+
   /** Create group */
   HSHM_ALWAYS_INLINE
   u32 GetGroup(hshm::charbuf &group) {
@@ -300,9 +399,9 @@ struct StatBdevTask : public Task, TaskFlags<TF_LOCAL> {
 };
 
 /** A task to monitor bdev statistics */
-struct UpdateScoreTask : public Task, TaskFlags<TF_LOCAL> {
-  OUT float old_score_;
-  OUT float new_score_;
+struct UpdateScoreTask : public Task, TaskFlags<TF_SRL_SYM> {
+  IN float old_score_;
+  IN float new_score_;
 
   /** SHM default constructor */
   HSHM_ALWAYS_INLINE explicit
@@ -327,6 +426,18 @@ struct UpdateScoreTask : public Task, TaskFlags<TF_LOCAL> {
     // Custom
     old_score_ = old_score;
     new_score_ = new_score;
+  }
+
+  /** (De)serialize message call */
+  template<typename Ar>
+  void SerializeStart(Ar &ar) {
+    task_serialize<Ar>(ar);
+    ar(old_score_, new_score_);
+  }
+
+  /** (De)serialize message return */
+  template<typename Ar>
+  void SerializeEnd(u32 replica, Ar &ar) {
   }
 
   /** Create group */

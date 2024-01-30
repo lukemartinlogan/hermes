@@ -40,7 +40,8 @@ class Server : public TaskLib, public bdev::Server {
   /** Allocate space from bdev */
   void Allocate(AllocateTask *task, RunContext &rctx) {
     HILOG(kDebug, "Allocating {} bytes (RAM)", task->size_);
-    alloc_.Allocate(task->size_, *task->buffers_, task->alloc_size_);
+    std::vector<BufferInfo> buffers = task->buffers_->vec();
+    alloc_.Allocate(task->size_, buffers, task->alloc_size_);
     rem_cap_ -= task->alloc_size_;
     score_hist_.Increment(task->score_);
     HILOG(kDebug, "Allocated {} bytes (RAM)", task->alloc_size_);
@@ -51,7 +52,8 @@ class Server : public TaskLib, public bdev::Server {
 
   /** Free space to bdev */
   void Free(FreeTask *task, RunContext &rctx) {
-    rem_cap_ += alloc_.Free(task->buffers_);
+    std::vector<BufferInfo> buffers = task->buffers_->vec();
+    rem_cap_ += alloc_.Free(buffers);
     score_hist_.Decrement(task->score_);
     task->SetModuleComplete();
   }
@@ -61,7 +63,8 @@ class Server : public TaskLib, public bdev::Server {
   /** Write to bdev */
   void Write(WriteTask *task, RunContext &rctx) {
     HILOG(kDebug, "Writing {} bytes to RAM", task->size_);
-    memcpy(mem_ptr_ + task->disk_off_, task->buf_, task->size_);
+    char *data = HERMES_MEMORY_MANAGER->Convert<char>(task->data_);
+    memcpy(mem_ptr_ + task->disk_off_, data, task->size_);
     task->SetModuleComplete();
   }
   void MonitorWrite(u32 mode, WriteTask *task, RunContext &rctx) {
@@ -70,7 +73,8 @@ class Server : public TaskLib, public bdev::Server {
   /** Read from bdev */
   void Read(ReadTask *task, RunContext &rctx) {
     HILOG(kDebug, "Reading {} bytes from RAM", task->size_);
-    memcpy(task->buf_, mem_ptr_ + task->disk_off_, task->size_);
+    char *data = HERMES_MEMORY_MANAGER->Convert<char>(task->data_);
+    memcpy(data, mem_ptr_ + task->disk_off_, task->size_);
     task->SetModuleComplete();
   }
   void MonitorRead(u32 mode, ReadTask *task, RunContext &rctx) {
