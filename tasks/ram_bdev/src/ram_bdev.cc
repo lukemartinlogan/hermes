@@ -45,6 +45,7 @@ class Server : public TaskLib, public bdev::Server {
     rem_cap_ -= task->alloc_size_;
     score_hist_.Increment(task->score_);
     HILOG(kDebug, "Allocated {} bytes (RAM)", task->alloc_size_);
+    (*task->buffers_) = buffers;
     task->SetModuleComplete();
   }
   void MonitorAllocate(u32 mode, AllocateTask *task, RunContext &rctx) {

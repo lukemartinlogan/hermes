@@ -54,7 +54,7 @@ class Server : public TaskLib, public bdev::Server {
 
   /** Allocate space from bdev */
   void Allocate(AllocateTask *task, RunContext &rctx) {
-    std::vector<BufferInfo> buffers;
+    std::vector<BufferInfo> buffers = task->buffers_->vec();
     alloc_.Allocate(task->size_, buffers, task->alloc_size_);
     HILOG(kDebug, "Allocated {}/{} bytes ({})", task->alloc_size_, task->size_, path_);
     rem_cap_ -= task->alloc_size_;

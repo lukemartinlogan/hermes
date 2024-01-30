@@ -91,7 +91,7 @@ struct AllocateTask : public Task, TaskFlags<TF_SRL_SYM> {
                const TaskStateId &state_id,
                size_t size,
                float score,
-               std::vector<BufferInfo> *buffers) : Task(alloc) {
+               const std::vector<BufferInfo> &buffers) : Task(alloc) {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
@@ -104,7 +104,7 @@ struct AllocateTask : public Task, TaskFlags<TF_SRL_SYM> {
     // Free params
     size_ = size;
     score_ = score;
-    HSHM_MAKE_AR(buffers_, alloc, *buffers);
+    HSHM_MAKE_AR(buffers_, alloc, buffers);
   }
 
   /** Destructor */
@@ -122,7 +122,7 @@ struct AllocateTask : public Task, TaskFlags<TF_SRL_SYM> {
   /** (De)serialize message return */
   template<typename Ar>
   void SerializeEnd(u32 replica, Ar &ar) {
-    ar(buffers_);
+    ar(alloc_size_, buffers_);
   }
 
   /** Create group */

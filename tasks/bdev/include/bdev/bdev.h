@@ -101,9 +101,9 @@ class Client : public TaskLibClient {
                               const TaskNode &task_node,
                               size_t size,
                               float score,
-                              std::vector<BufferInfo> &buffers) {
+                              const std::vector<BufferInfo> &buffers) {
     HRUN_CLIENT->ConstructTask<AllocateTask>(
-        task, task_node, domain_id_, id_, score, size, &buffers);
+        task, task_node, domain_id_, id_, score, size, buffers);
   }
   HRUN_TASK_NODE_PUSH_ROOT(Allocate);
 
