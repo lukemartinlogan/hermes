@@ -40,6 +40,14 @@ void Run(u32 method, Task *task, RunContext &rctx) override {
       TagRemoveBlob(reinterpret_cast<TagRemoveBlobTask *>(task), rctx);
       break;
     }
+    case Method::kSetTagTrait: {
+      SetTagTrait(reinterpret_cast<SetTagTraitTask *>(task), rctx);
+      break;
+    }
+    case Method::kGetTagTrait: {
+      GetTagTrait(reinterpret_cast<GetTagTraitTask *>(task), rctx);
+      break;
+    }
     case Method::kTagClearBlobs: {
       TagClearBlobs(reinterpret_cast<TagClearBlobsTask *>(task), rctx);
       break;
@@ -111,6 +119,14 @@ void Monitor(u32 mode, Task *task, RunContext &rctx) override {
     }
     case Method::kTagRemoveBlob: {
       MonitorTagRemoveBlob(mode, reinterpret_cast<TagRemoveBlobTask *>(task), rctx);
+      break;
+    }
+    case Method::kSetTagTrait: {
+      MonitorSetTagTrait(mode, reinterpret_cast<SetTagTraitTask *>(task), rctx);
+      break;
+    }
+    case Method::kGetTagTrait: {
+      MonitorGetTagTrait(mode, reinterpret_cast<GetTagTraitTask *>(task), rctx);
       break;
     }
     case Method::kTagClearBlobs: {
@@ -186,6 +202,14 @@ void Del(u32 method, Task *task) override {
       HRUN_CLIENT->DelTask<TagRemoveBlobTask>(reinterpret_cast<TagRemoveBlobTask *>(task));
       break;
     }
+    case Method::kSetTagTrait: {
+      HRUN_CLIENT->DelTask<SetTagTraitTask>(reinterpret_cast<SetTagTraitTask *>(task));
+      break;
+    }
+    case Method::kGetTagTrait: {
+      HRUN_CLIENT->DelTask<GetTagTraitTask>(reinterpret_cast<GetTagTraitTask *>(task));
+      break;
+    }
     case Method::kTagClearBlobs: {
       HRUN_CLIENT->DelTask<TagClearBlobsTask>(reinterpret_cast<TagClearBlobsTask *>(task));
       break;
@@ -257,6 +281,14 @@ void Dup(u32 method, Task *orig_task, std::vector<LPointer<Task>> &dups) overrid
     }
     case Method::kTagRemoveBlob: {
       hrun::CALL_DUPLICATE(reinterpret_cast<TagRemoveBlobTask*>(orig_task), dups);
+      break;
+    }
+    case Method::kSetTagTrait: {
+      hrun::CALL_DUPLICATE(reinterpret_cast<SetTagTraitTask*>(orig_task), dups);
+      break;
+    }
+    case Method::kGetTagTrait: {
+      hrun::CALL_DUPLICATE(reinterpret_cast<GetTagTraitTask*>(orig_task), dups);
       break;
     }
     case Method::kTagClearBlobs: {
@@ -332,6 +364,14 @@ void DupEnd(u32 method, u32 replica, Task *orig_task, Task *dup_task) override {
       hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<TagRemoveBlobTask*>(orig_task), reinterpret_cast<TagRemoveBlobTask*>(dup_task));
       break;
     }
+    case Method::kSetTagTrait: {
+      hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<SetTagTraitTask*>(orig_task), reinterpret_cast<SetTagTraitTask*>(dup_task));
+      break;
+    }
+    case Method::kGetTagTrait: {
+      hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<GetTagTraitTask*>(orig_task), reinterpret_cast<GetTagTraitTask*>(dup_task));
+      break;
+    }
     case Method::kTagClearBlobs: {
       hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<TagClearBlobsTask*>(orig_task), reinterpret_cast<TagClearBlobsTask*>(dup_task));
       break;
@@ -403,6 +443,14 @@ void ReplicateStart(u32 method, u32 count, Task *task) override {
     }
     case Method::kTagRemoveBlob: {
       hrun::CALL_REPLICA_START(count, reinterpret_cast<TagRemoveBlobTask*>(task));
+      break;
+    }
+    case Method::kSetTagTrait: {
+      hrun::CALL_REPLICA_START(count, reinterpret_cast<SetTagTraitTask*>(task));
+      break;
+    }
+    case Method::kGetTagTrait: {
+      hrun::CALL_REPLICA_START(count, reinterpret_cast<GetTagTraitTask*>(task));
       break;
     }
     case Method::kTagClearBlobs: {
@@ -478,6 +526,14 @@ void ReplicateEnd(u32 method, Task *task) override {
       hrun::CALL_REPLICA_END(reinterpret_cast<TagRemoveBlobTask*>(task));
       break;
     }
+    case Method::kSetTagTrait: {
+      hrun::CALL_REPLICA_END(reinterpret_cast<SetTagTraitTask*>(task));
+      break;
+    }
+    case Method::kGetTagTrait: {
+      hrun::CALL_REPLICA_END(reinterpret_cast<GetTagTraitTask*>(task));
+      break;
+    }
     case Method::kTagClearBlobs: {
       hrun::CALL_REPLICA_END(reinterpret_cast<TagClearBlobsTask*>(task));
       break;
@@ -549,6 +605,14 @@ std::vector<DataTransfer> SaveStart(u32 method, BinaryOutputArchive<true> &ar, T
     }
     case Method::kTagRemoveBlob: {
       ar << *reinterpret_cast<TagRemoveBlobTask*>(task);
+      break;
+    }
+    case Method::kSetTagTrait: {
+      ar << *reinterpret_cast<SetTagTraitTask*>(task);
+      break;
+    }
+    case Method::kGetTagTrait: {
+      ar << *reinterpret_cast<GetTagTraitTask*>(task);
       break;
     }
     case Method::kTagClearBlobs: {
@@ -635,6 +699,16 @@ TaskPointer LoadStart(u32 method, BinaryInputArchive<true> &ar) override {
       ar >> *reinterpret_cast<TagRemoveBlobTask*>(task_ptr.ptr_);
       break;
     }
+    case Method::kSetTagTrait: {
+      task_ptr.ptr_ = HRUN_CLIENT->NewEmptyTask<SetTagTraitTask>(task_ptr.shm_);
+      ar >> *reinterpret_cast<SetTagTraitTask*>(task_ptr.ptr_);
+      break;
+    }
+    case Method::kGetTagTrait: {
+      task_ptr.ptr_ = HRUN_CLIENT->NewEmptyTask<GetTagTraitTask>(task_ptr.shm_);
+      ar >> *reinterpret_cast<GetTagTraitTask*>(task_ptr.ptr_);
+      break;
+    }
     case Method::kTagClearBlobs: {
       task_ptr.ptr_ = HRUN_CLIENT->NewEmptyTask<TagClearBlobsTask>(task_ptr.shm_);
       ar >> *reinterpret_cast<TagClearBlobsTask*>(task_ptr.ptr_);
@@ -717,6 +791,14 @@ std::vector<DataTransfer> SaveEnd(u32 method, BinaryOutputArchive<false> &ar, Ta
       ar << *reinterpret_cast<TagRemoveBlobTask*>(task);
       break;
     }
+    case Method::kSetTagTrait: {
+      ar << *reinterpret_cast<SetTagTraitTask*>(task);
+      break;
+    }
+    case Method::kGetTagTrait: {
+      ar << *reinterpret_cast<GetTagTraitTask*>(task);
+      break;
+    }
     case Method::kTagClearBlobs: {
       ar << *reinterpret_cast<TagClearBlobsTask*>(task);
       break;
@@ -791,6 +873,14 @@ void LoadEnd(u32 replica, u32 method, BinaryInputArchive<false> &ar, Task *task)
       ar.Deserialize(replica, *reinterpret_cast<TagRemoveBlobTask*>(task));
       break;
     }
+    case Method::kSetTagTrait: {
+      ar.Deserialize(replica, *reinterpret_cast<SetTagTraitTask*>(task));
+      break;
+    }
+    case Method::kGetTagTrait: {
+      ar.Deserialize(replica, *reinterpret_cast<GetTagTraitTask*>(task));
+      break;
+    }
     case Method::kTagClearBlobs: {
       ar.Deserialize(replica, *reinterpret_cast<TagClearBlobsTask*>(task));
       break;
@@ -854,6 +944,12 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
     }
     case Method::kTagRemoveBlob: {
       return reinterpret_cast<TagRemoveBlobTask*>(task)->GetGroup(group);
+    }
+    case Method::kSetTagTrait: {
+      return reinterpret_cast<SetTagTraitTask*>(task)->GetGroup(group);
+    }
+    case Method::kGetTagTrait: {
+      return reinterpret_cast<GetTagTraitTask*>(task)->GetGroup(group);
     }
     case Method::kTagClearBlobs: {
       return reinterpret_cast<TagClearBlobsTask*>(task)->GetGroup(group);

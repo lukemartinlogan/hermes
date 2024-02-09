@@ -6,8 +6,8 @@ kDestroyTag: 4
 kTagAddBlob: 5
 kTagRemoveBlob: 6
 # kTagGroupBy: 7
-# kTagAddTrait: 8
-# kTagRemoveTrait: 9
+kSetTagTrait: 8
+kGetTagTrait: 9
 kTagClearBlobs: 10
 kUpdateSize: 11
 kAppendBlobSchema: 12

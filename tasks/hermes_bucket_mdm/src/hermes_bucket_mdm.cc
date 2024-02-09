@@ -260,6 +260,47 @@ class Server : public TaskLib {
   void MonitorGetOrCreateTag(u32 mode, GetOrCreateTagTask *task, RunContext &rctx) {
   }
 
+  /** Set the trait being used in the bucket */
+  void SetTagTrait(SetTagTraitTask *task, RunContext &rctx) {
+    TAG_MAP_T &tag_map = tag_map_[rctx.lane_id_];
+    if (tag_map.find(task->tag_id_) == tag_map.end()) {
+      task->SetModuleComplete();
+      return;
+    }
+    TagInfo &tag_info = tag_map[task->tag_id_];
+    tag_info.trait_ = task->trait_;
+    task->SetModuleComplete();
+  }
+  void MonitorSetTrait(u32 mode, SetTagTraitTask *task, RunContext &rctx) {
+  }
+
+  /** Get the trait being used in the bucket */
+  void GetTagTrait(GetTagTraitTask *task, RunContext &rctx) {
+    TAG_MAP_T &tag_map = tag_map_[rctx.lane_id_];
+    auto it = tag_map.find(task->tag_id_);
+    if (it == tag_map.end()) {
+      // Get trait from remote node
+      LPointer<GetTagTraitTask> get_trait =
+          bkt_mdm_.AsyncGetTagTrait(
+              task->task_node_ + 1,
+              DomainId::GetNode(HASH_TO_NODE_ID(task->tag_id_.hash_)),
+              task->tag_id_);
+      get_trait->Wait<TASK_YIELD_CO>(task);
+      tag_map.emplace();
+      TagInfo &tag_info = tag_map[task->tag_id_];
+      tag_info.flags_.SetBits(HERMES_IS_REPLICA);
+      tag_info.trait_ = get_trait->trait_;
+      HRUN_CLIENT->DelTask(get_trait);
+      task->SetModuleComplete();
+      return;
+    }
+    TagInfo &tag_info = tag_map[task->tag_id_];
+    task->trait_ = tag_info.trait_;
+    task->SetModuleComplete();
+  }
+  void MonitorGetTrait(u32 mode, GetTraitTask *task, RunContext &rctx) {
+  }
+
   /** Get tag ID */
   void GetTagId(GetTagIdTask *task, RunContext &rctx) {
     TAG_ID_MAP_T &tag_id_map = tag_id_map_[rctx.lane_id_];

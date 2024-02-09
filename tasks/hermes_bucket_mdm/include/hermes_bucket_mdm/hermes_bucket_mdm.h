@@ -203,6 +203,48 @@ class Client : public TaskLibClient {
   }
   HRUN_TASK_NODE_PUSH_ROOT(RenameTag);
 
+  /** Rename tag */
+  void AsyncGetTagTraitConstruct(GetTagTraitTask *task,
+                                 const TaskNode &task_node,
+                                 const DomainId &domain_id,
+                                 const TagId &tag_id) {
+    u32 hash = tag_id.hash_;
+    HRUN_CLIENT->ConstructTask<GetTagTraitTask>(
+        task, task_node, domain_id, id_, tag_id);
+  }
+  TraitId GetTagTraitRoot(const DomainId &domain_id, const TagId &tag_id) {
+    LPointer<hrunpq::TypedPushTask<GetTagTraitTask>> push_task =
+        AsyncGetTagTraitRoot(domain_id, tag_id);
+    push_task->Wait();
+    GetTagTraitTask *task = push_task->get();
+    TaskStateId trait = task->trait_;
+    HRUN_CLIENT->DelTask(push_task);
+    return trait;
+  }
+  HRUN_TASK_NODE_PUSH_ROOT(GetTagTrait);
+
+  /** Rename tag */
+  void AsyncSetTagTraitConstruct(SetTagTraitTask *task,
+                                 const TaskNode &task_node,
+                                 const DomainId &domain_id,
+                                 const TagId &tag_id,
+                                 const TraitId &trait) {
+    u32 hash = tag_id.hash_;
+    HRUN_CLIENT->ConstructTask<SetTagTraitTask>(
+        task, task_node, domain_id, id_,
+        tag_id, trait);
+  }
+  void SetTagTraitRoot(const DomainId &domain_id,
+                       const TagId &tag_id,
+                       const TraitId &trait) {
+    LPointer<hrunpq::TypedPushTask<SetTagTraitTask>> push_task =
+        AsyncSetTagTraitRoot(domain_id, tag_id, trait);
+    push_task->Wait();
+    SetTagTraitTask *task = push_task->get();
+    HRUN_CLIENT->DelTask(push_task);
+  }
+  HRUN_TASK_NODE_PUSH_ROOT(SetTagTrait);
+
   /** Destroy tag */
   void AsyncDestroyTagConstruct(DestroyTagTask *task,
                                 const TaskNode &task_node,
@@ -294,8 +336,8 @@ class Client : public TaskLibClient {
 
   /** Get contained blob ids */
   void AsyncGetContainedBlobIdsConstruct(GetContainedBlobIdsTask *task,
-                             const TaskNode &task_node,
-                             const TagId &tag_id) {
+                                         const TaskNode &task_node,
+                                         const TagId &tag_id) {
     u32 hash = tag_id.hash_;
     HRUN_CLIENT->ConstructTask<GetContainedBlobIdsTask>(
         task, task_node, DomainId::GetNode(HASH_TO_NODE_ID(hash)), id_,
@@ -316,7 +358,7 @@ class Client : public TaskLibClient {
   * Get all tag metadata
   * */
   void AsyncPollTagMetadataConstruct(PollTagMetadataTask *task,
-                                        const TaskNode &task_node) {
+                                     const TaskNode &task_node) {
     HRUN_CLIENT->ConstructTask<PollTagMetadataTask>(
         task, task_node, id_);
   }

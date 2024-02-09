@@ -235,6 +235,9 @@ class PutBlobPhase {
 #define HERMES_GET_BLOB_ID BIT_OPT(u32, 7)
 #define HERMES_HAS_DERIVED BIT_OPT(u32, 8)
 #define HERMES_USER_SCORE_STATIONARY BIT_OPT(u32, 9)
+#define HERMES_BUCKET_TRAIT_VALID BIT_OPT(u32, 10)
+#define HERMES_BUCKET_LINKS_VALID (u32, 11)
+#define HERMES_IS_REPLICA BIT_OPT(u32, 12)
 
 /** A task to put data in a blob */
 struct PutBlobTask : public Task, TaskFlags<TF_SRL_ASYM_START | TF_SRL_SYM_END> {

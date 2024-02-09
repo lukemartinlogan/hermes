@@ -126,8 +126,8 @@ class Bucket {
   /**
    * Attach a trait to the bucket
    * */
-  void AttachTrait(TraitId trait_id) {
-    // TODO(llogan)
+  void SetTagTrait(TraitId trait_id) {
+    bkt_mdm_->SetTagTraitRoot(DomainId::GetGlobal(), id_, trait_id);
   }
 
   /**

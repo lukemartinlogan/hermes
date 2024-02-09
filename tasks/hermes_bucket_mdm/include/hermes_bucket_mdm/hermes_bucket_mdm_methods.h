@@ -10,6 +10,8 @@ struct Method : public TaskMethod {
   TASK_METHOD_T kDestroyTag = kLast + 4;
   TASK_METHOD_T kTagAddBlob = kLast + 5;
   TASK_METHOD_T kTagRemoveBlob = kLast + 6;
+  TASK_METHOD_T kSetTagTrait = kLast + 8;
+  TASK_METHOD_T kGetTagTrait = kLast + 9;
   TASK_METHOD_T kTagClearBlobs = kLast + 10;
   TASK_METHOD_T kUpdateSize = kLast + 11;
   TASK_METHOD_T kAppendBlobSchema = kLast + 12;
