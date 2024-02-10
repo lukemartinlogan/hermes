@@ -12,6 +12,7 @@
 #include "data_stager/data_stager.h"
 #include "hermes_data_op/hermes_data_op.h"
 #include "hermes/score_histogram.h"
+#include "hermes_traits/hermes_traits.h"
 
 namespace hermes::blob_mdm {
 
@@ -495,6 +496,15 @@ class Server : public TaskLib {
                                 task->blob_off_,
                                 task->data_size_);
     }
+    // Get the trait for this bucket
+    LPointer<bucket_mdm::GetTagTraitTask> trait_task =
+        bkt_mdm_.AsyncGetTagTrait(task->task_node_ + 1,
+                                  DomainId::GetLocal(),
+                                  task->tag_id_,
+                                  TraitType::kDataOpTrait);
+    trait_task->Wait<TASK_YIELD_CO>(task);
+    TraitId trait_id = trait_task->trait_id_;
+    HRUN_CLIENT->DelTask(trait_task);
 
     // Free data
     HILOG(kDebug, "Completing PUT for {}", blob_name.str());

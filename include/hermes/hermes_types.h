@@ -57,7 +57,7 @@ typedef TaskStateId TraitId;
 /** Different categories of traits */
 enum class TraitType {
   kStagingTrait,
-  kProducerOpTrait
+  kDataOpTrait
 };
 
 /** Represents a blob  */
@@ -129,13 +129,13 @@ struct Context {
   u32 node_id_;
 
   /** A task to execute during PUT / GET */
-  TaskStateId trait_;
+  TaskStateId trait_id_;
 
   Context()
   : dpe_(PlacementPolicy::kNone),
     blob_score_(1),
     node_id_(0),
-    trait_(TaskStateId::GetNull()) {}
+    trait_id_(TaskStateId::GetNull()) {}
 };
 
 /**
@@ -346,12 +346,12 @@ struct TagInfo {
   size_t page_size_;
   bitfield32_t flags_;
   bool owner_;
-  TaskStateId trait_;
+  TaskStateId trait_id_;
 
   /** Serialization */
   template<typename Ar>
   void serialize(Ar &ar) {
-    ar(tag_id_, name_, internal_size_, page_size_, owner_, flags_, trait_);
+    ar(tag_id_, name_, internal_size_, page_size_, owner_, flags_, trait_id_);
   }
 
   /** Get std::string of name */

@@ -354,7 +354,7 @@ struct GetOrCreateTagTask : public Task, TaskFlags<TF_SRL_SYM> {
   IN hipc::ShmArchive<hipc::vector<TraitId>> traits_;
   IN size_t backend_size_;
   IN bitfield32_t flags_;
-  IN TaskStateId trait_;
+  IN TaskStateId trait_id_;
   OUT TagId tag_id_;
 
   /** SHM default constructor */
@@ -388,7 +388,7 @@ struct GetOrCreateTagTask : public Task, TaskFlags<TF_SRL_SYM> {
     HSHM_MAKE_AR(traits_, alloc, traits)
     HSHM_MAKE_AR(params_, alloc, ctx.bkt_params_)
     flags_ = bitfield32_t(flags | ctx.flags_.bits_);
-    trait_ = ctx.trait_;
+    trait_id_ = ctx.trait_id_;
   }
 
   /** Destructor */
@@ -403,7 +403,7 @@ struct GetOrCreateTagTask : public Task, TaskFlags<TF_SRL_SYM> {
   void SerializeStart(Ar &ar) {
     task_serialize<Ar>(ar);
     ar(tag_name_, blob_owner_, traits_, backend_size_,
-       flags_, params_, trait_);
+       flags_, params_, trait_id_);
   }
 
   /** (De)serialize message return */
@@ -598,7 +598,8 @@ struct RenameTagTask : public Task, TaskFlags<TF_SRL_SYM> {
 /** A task to get the trait assigned to the tag */
 struct GetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
   IN TagId tag_id_;
-  OUT TraitId trait_;
+  IN TraitType trait_type_;
+  OUT TraitId trait_id_;
 
   /** SHM default constructor */
   HSHM_ALWAYS_INLINE explicit
@@ -610,7 +611,8 @@ struct GetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
                 const TaskNode &task_node,
                 const DomainId &domain_id,
                 const TaskStateId &state_id,
-                const TagId &tag_id) : Task(alloc) {
+                const TagId &tag_id,
+                TraitType trait_type) : Task(alloc) {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = tag_id.hash_;
@@ -622,6 +624,7 @@ struct GetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
 
     // Custom params
     tag_id_ = tag_id;
+    trait_type_ = trait_type;
   }
 
   /** Destructor */
@@ -631,13 +634,13 @@ struct GetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
   template<typename Ar>
   void SerializeStart(Ar &ar) {
     task_serialize<Ar>(ar);
-    ar(tag_id_);
+    ar(tag_id_, trait_type_);
   }
 
   /** (De)serialize message return */
   template<typename Ar>
   void SerializeEnd(u32 replica, Ar &ar) {
-    ar(trait_);
+    ar(trait_id_);
   }
 
   /** Create group */
@@ -653,7 +656,8 @@ struct GetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
 /** A task to set the trait assigned to the tag */
 struct SetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
   IN TagId tag_id_;
-  IN TraitId trait_;
+  IN TraitType trait_type_;
+  IN TraitId trait_id_;
 
   /** SHM default constructor */
   HSHM_ALWAYS_INLINE explicit
@@ -666,7 +670,8 @@ struct SetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
                   const DomainId &domain_id,
                   const TaskStateId &state_id,
                   const TagId &tag_id,
-                  const TraitId &trait) : Task(alloc) {
+                  TraitType trait_type,
+                  const TraitId &trait_id) : Task(alloc) {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = tag_id.hash_;
@@ -678,7 +683,8 @@ struct SetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
 
     // Custom params
     tag_id_ = tag_id;
-    trait_ = trait;
+    trait_id_ = trait_id;
+    trait_type_ = trait_type;
   }
 
   /** Destructor */
@@ -688,13 +694,12 @@ struct SetTagTraitTask : public Task, TaskFlags<TF_SRL_SYM> {
   template<typename Ar>
   void SerializeStart(Ar &ar) {
     task_serialize<Ar>(ar);
-    ar(tag_id_, trait_);
+    ar(tag_id_, trait_id_, trait_type_);
   }
 
   /** (De)serialize message return */
   template<typename Ar>
   void SerializeEnd(u32 replica, Ar &ar) {
-    ar(trait_);
   }
 
   /** Create group */

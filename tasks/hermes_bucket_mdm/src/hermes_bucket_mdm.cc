@@ -268,7 +268,7 @@ class Server : public TaskLib {
       return;
     }
     TagInfo &tag_info = tag_map[task->tag_id_];
-    tag_info.trait_ = task->trait_;
+    tag_info.trait_id_ = task->trait_id_;
     task->SetModuleComplete();
   }
   void MonitorSetTrait(u32 mode, SetTagTraitTask *task, RunContext &rctx) {
@@ -289,13 +289,13 @@ class Server : public TaskLib {
       tag_map.emplace();
       TagInfo &tag_info = tag_map[task->tag_id_];
       tag_info.flags_.SetBits(HERMES_IS_REPLICA);
-      tag_info.trait_ = get_trait->trait_;
+      tag_info.trait_id_ = get_trait->trait_id_;
       HRUN_CLIENT->DelTask(get_trait);
       task->SetModuleComplete();
       return;
     }
     TagInfo &tag_info = tag_map[task->tag_id_];
-    task->trait_ = tag_info.trait_;
+    task->trait_id_ = tag_info.trait_id_;
     task->SetModuleComplete();
   }
   void MonitorGetTrait(u32 mode, GetTraitTask *task, RunContext &rctx) {

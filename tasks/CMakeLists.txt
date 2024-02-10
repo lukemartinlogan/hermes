@@ -1,4 +1,5 @@
 add_subdirectory(bdev)
+add_subdirectory(hermes_traits)
 add_subdirectory(ram_bdev)
 add_subdirectory(posix_bdev)
 add_subdirectory(hermes_mdm)

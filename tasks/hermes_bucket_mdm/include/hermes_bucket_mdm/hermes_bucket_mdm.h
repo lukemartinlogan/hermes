@@ -203,42 +203,47 @@ class Client : public TaskLibClient {
   }
   HRUN_TASK_NODE_PUSH_ROOT(RenameTag);
 
-  /** Rename tag */
+  /** Get tag trait */
   void AsyncGetTagTraitConstruct(GetTagTraitTask *task,
                                  const TaskNode &task_node,
                                  const DomainId &domain_id,
-                                 const TagId &tag_id) {
+                                 const TagId &tag_id,
+                                 TraitType trait_type) {
     u32 hash = tag_id.hash_;
     HRUN_CLIENT->ConstructTask<GetTagTraitTask>(
-        task, task_node, domain_id, id_, tag_id);
+        task, task_node, domain_id, id_, tag_id, trait_type);
   }
-  TraitId GetTagTraitRoot(const DomainId &domain_id, const TagId &tag_id) {
+  TraitId GetTagTraitRoot(const DomainId &domain_id,
+                          const TagId &tag_id,
+                          TraitType trait_type) {
     LPointer<hrunpq::TypedPushTask<GetTagTraitTask>> push_task =
-        AsyncGetTagTraitRoot(domain_id, tag_id);
+        AsyncGetTagTraitRoot(domain_id, tag_id, trait_type);
     push_task->Wait();
     GetTagTraitTask *task = push_task->get();
-    TaskStateId trait = task->trait_;
+    TaskStateId trait_id = task->trait_id_;
     HRUN_CLIENT->DelTask(push_task);
-    return trait;
+    return trait_id;
   }
   HRUN_TASK_NODE_PUSH_ROOT(GetTagTrait);
 
-  /** Rename tag */
+  /** Set tag trait */
   void AsyncSetTagTraitConstruct(SetTagTraitTask *task,
                                  const TaskNode &task_node,
                                  const DomainId &domain_id,
                                  const TagId &tag_id,
-                                 const TraitId &trait) {
+                                 TraitType trait_type,
+                                 const TraitId &trait_id) {
     u32 hash = tag_id.hash_;
     HRUN_CLIENT->ConstructTask<SetTagTraitTask>(
         task, task_node, domain_id, id_,
-        tag_id, trait);
+        tag_id, trait_type, trait_id);
   }
   void SetTagTraitRoot(const DomainId &domain_id,
                        const TagId &tag_id,
-                       const TraitId &trait) {
+                       TraitType trait_type,
+                       const TraitId &trait_id) {
     LPointer<hrunpq::TypedPushTask<SetTagTraitTask>> push_task =
-        AsyncSetTagTraitRoot(domain_id, tag_id, trait);
+        AsyncSetTagTraitRoot(domain_id, tag_id, trait_type, trait_id);
     push_task->Wait();
     SetTagTraitTask *task = push_task->get();
     HRUN_CLIENT->DelTask(push_task);
