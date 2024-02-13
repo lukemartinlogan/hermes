@@ -15,7 +15,7 @@
 
 #include "hermes_traits_tasks.h"
 
-namespace hrun::hermes_traits {
+namespace hermes::traits {
 
 /** Create hermes_traits requests */
 class Client : public TaskLibClient {
@@ -55,20 +55,52 @@ class Client : public TaskLibClient {
     HRUN_ADMIN->DestroyTaskStateRoot(domain_id, id_);
   }
 
-  /** Call a custom method */
+  /** Encode a blob */
   HSHM_ALWAYS_INLINE
-  void AsyncCustomConstruct(CustomTask *task,
+  void AsyncEncodeConstruct(EncodeTask *task,
                             const TaskNode &task_node,
-                            const DomainId &domain_id) {
-    HRUN_CLIENT->ConstructTask<CustomTask>(
-        task, task_node, domain_id, id_);
+                            const DomainId &domain_id,
+                            BlobInfo &blob_info,
+                            blob_mdm::PutBlobTask *put_blob_task,
+                            blob_mdm::Server *blob_mdm_state) {
+    HRUN_CLIENT->ConstructTask<EncodeTask>(
+        task, task_node, domain_id, id_,
+        blob_info, put_blob_task, blob_mdm_state);
   }
   HSHM_ALWAYS_INLINE
-  void CustomRoot(const DomainId &domain_id) {
-    LPointer<hrunpq::TypedPushTask<CustomTask>> task = AsyncCustomRoot(domain_id);
+  void EncodeRoot(const DomainId &domain_id,
+                  BlobInfo &blob_info,
+                  blob_mdm::PutBlobTask *put_blob_task,
+                  blob_mdm::Server *blob_mdm_state) {
+    LPointer<hrunpq::TypedPushTask<EncodeTask>> task =
+        AsyncEncodeRoot(domain_id, blob_info, put_blob_task, blob_mdm_state);
     task.ptr_->Wait();
   }
-  HRUN_TASK_NODE_PUSH_ROOT(Custom);
+  HRUN_TASK_NODE_PUSH_ROOT(Encode);
+
+  /** Encode a blob */
+  HSHM_ALWAYS_INLINE
+  void AsyncDecodeConstruct(DecodeTask *task,
+                            const TaskNode &task_node,
+                            const DomainId &domain_id,
+                            BlobInfo &blob_info,
+                            blob_mdm::GetBlobTask *get_blob_task,
+                            blob_mdm::Server *blob_mdm_state) {
+    HRUN_CLIENT->ConstructTask<DecodeTask>(
+        task, task_node, domain_id, id_,
+        blob_info, get_blob_task, blob_mdm_state);
+  }
+  HSHM_ALWAYS_INLINE
+  void DecodeRoot(const DomainId &domain_id,
+                  BlobInfo &blob_info,
+                  blob_mdm::GetBlobTask *get_blob_task,
+                  blob_mdm::Server *blob_mdm_state) {
+    LPointer<hrunpq::TypedPushTask<DecodeTask>> task =
+        AsyncDecodeRoot(domain_id, blob_info, get_blob_task,
+                        blob_mdm_state);
+    task.ptr_->Wait();
+  }
+  HRUN_TASK_NODE_PUSH_ROOT(Decode);
 };
 
 }  // namespace hrun

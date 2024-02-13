@@ -11,7 +11,13 @@
 #include "hrun/queue_manager/queue_manager_client.h"
 #include "proc_queue/proc_queue.h"
 
-namespace hrun::hermes_traits {
+#include "hermes_blob_mdm/hermes_blob_mdm.h"
+
+namespace hermes::blob_mdm {
+class Server;
+}  // namespace hermes::blob_mdm
+
+namespace hermes::traits {
 
 #include "hermes_traits_methods.h"
 #include "hrun/hrun_namespace.h"
@@ -71,57 +77,40 @@ struct DestructTask : public DestroyTaskStateTask {
 };
 
 /**
- * A custom task in hermes_traits
+ * A task to encode data
  * */
-struct CustomTask : public Task, TaskFlags<TF_SRL_SYM> {
+struct EncodeTask : public Task, TaskFlags<TF_LOCAL> {
+  IN BlobInfo *blob_info_;
+  IN blob_mdm::PutBlobTask *put_blob_task_;
+  IN blob_mdm::Server *blob_mdm_state_;
+
   /** SHM default constructor */
   HSHM_ALWAYS_INLINE explicit
-  CustomTask(hipc::Allocator *alloc) : Task(alloc) {}
+  EncodeTask(hipc::Allocator *alloc) : Task(alloc) {}
 
   /** Emplace constructor */
   HSHM_ALWAYS_INLINE explicit
-  CustomTask(hipc::Allocator *alloc,
+  EncodeTask(hipc::Allocator *alloc,
              const TaskNode &task_node,
              const DomainId &domain_id,
-             const TaskStateId &state_id) : Task(alloc) {
+             const TaskStateId &state_id,
+             BlobInfo &blob_info,
+             blob_mdm::PutBlobTask *put_blob_task,
+             blob_mdm::Server *blob_mdm_state) : Task(alloc) {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
     prio_ = TaskPrio::kLowLatency;
     task_state_ = state_id;
-    method_ = Method::kCustom;
+    method_ = Method::kEncode;
     task_flags_.SetBits(0);
     domain_id_ = domain_id;
 
     // Custom params
+    blob_info_ = &blob_info;
+    put_blob_task_ = put_blob_task;
+    blob_mdm_state_ = blob_mdm_state;
   }
-
-  /** (De)serialize message call */
-  template<typename Ar>
-  void SerializeStart(Ar &ar) {
-    task_serialize<Ar>(ar);
-  }
-
-  /** (De)serialize message return */
-  template<typename Ar>
-  void SerializeEnd(u32 replica, Ar &ar) {
-  }
-
-  /** Duplicate message */
-  void Dup(hipc::Allocator *alloc, CustomTask &other) {
-    task_dup(other);
-  }
-
-  /** Process duplicate message output */
-  void DupEnd(u32 replica, CustomTask &dup_task) {
-  }
-
-  /** Begin replication */
-  void ReplicateStart(u32 count) {
-  }
-
-  /** Finalize replication */
-  void ReplicateEnd() {}
 
   /** Create group */
   HSHM_ALWAYS_INLINE
@@ -130,6 +119,49 @@ struct CustomTask : public Task, TaskFlags<TF_SRL_SYM> {
   }
 };
 
-}  // namespace hrun::hermes_traits
+/**
+ * A task to decode data
+ * */
+struct DecodeTask : public Task, TaskFlags<TF_LOCAL> {
+  IN BlobInfo *blob_info_;
+  IN blob_mdm::GetBlobTask *get_blob_task_;
+  IN blob_mdm::Server *blob_mdm_state_;
+
+  /** SHM default constructor */
+  HSHM_ALWAYS_INLINE explicit
+  DecodeTask(hipc::Allocator *alloc) : Task(alloc) {}
+
+  /** Emplace constructor */
+  HSHM_ALWAYS_INLINE explicit
+  DecodeTask(hipc::Allocator *alloc,
+             const TaskNode &task_node,
+             const DomainId &domain_id,
+             const TaskStateId &state_id,
+             BlobInfo &blob_info,
+             blob_mdm::GetBlobTask *get_blob_task,
+             blob_mdm::Server *blob_mdm_state) : Task(alloc) {
+    // Initialize task
+    task_node_ = task_node;
+    lane_hash_ = 0;
+    prio_ = TaskPrio::kLowLatency;
+    task_state_ = state_id;
+    method_ = Method::kEncode;
+    task_flags_.SetBits(0);
+    domain_id_ = domain_id;
+
+    // Custom params
+    blob_info_ = &blob_info;
+    get_blob_task_ = get_blob_task;
+    blob_mdm_state_ = blob_mdm_state;
+  }
+
+  /** Create group */
+  HSHM_ALWAYS_INLINE
+  u32 GetGroup(hshm::charbuf &group) {
+    return TASK_UNORDERED;
+  }
+};
+
+}  // namespace hermes::traits
 
 #endif  // HRUN_TASKS_TASK_TEMPL_INCLUDE_hermes_traits_hermes_traits_TASKS_H_

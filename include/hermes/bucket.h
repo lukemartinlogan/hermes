@@ -124,13 +124,6 @@ class Bucket {
   }
 
   /**
-   * Attach a trait to the bucket
-   * */
-  void SetTagTrait(TraitId trait_id) {
-    bkt_mdm_->SetTagTraitRoot(DomainId::GetGlobal(), id_, trait_id);
-  }
-
-  /**
    * Get the current size of the bucket
    * */
   size_t GetSize() {

@@ -56,8 +56,8 @@ typedef TaskStateId TraitId;
 
 /** Different categories of traits */
 enum class TraitType {
-  kStagingTrait,
-  kDataOpTrait
+  kStaging,
+  kDataOp
 };
 
 /** Represents a blob  */

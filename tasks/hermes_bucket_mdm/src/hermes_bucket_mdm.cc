@@ -271,7 +271,7 @@ class Server : public TaskLib {
     tag_info.trait_id_ = task->trait_id_;
     task->SetModuleComplete();
   }
-  void MonitorSetTrait(u32 mode, SetTagTraitTask *task, RunContext &rctx) {
+  void MonitorSetTagTrait(u32 mode, SetTagTraitTask *task, RunContext &rctx) {
   }
 
   /** Get the trait being used in the bucket */
@@ -284,7 +284,8 @@ class Server : public TaskLib {
           bkt_mdm_.AsyncGetTagTrait(
               task->task_node_ + 1,
               DomainId::GetNode(HASH_TO_NODE_ID(task->tag_id_.hash_)),
-              task->tag_id_);
+              task->tag_id_,
+              TraitType::kDataOp);
       get_trait->Wait<TASK_YIELD_CO>(task);
       tag_map.emplace();
       TagInfo &tag_info = tag_map[task->tag_id_];
@@ -298,7 +299,7 @@ class Server : public TaskLib {
     task->trait_id_ = tag_info.trait_id_;
     task->SetModuleComplete();
   }
-  void MonitorGetTrait(u32 mode, GetTraitTask *task, RunContext &rctx) {
+  void MonitorGetTagTrait(u32 mode, GetTagTraitTask *task, RunContext &rctx) {
   }
 
   /** Get tag ID */
