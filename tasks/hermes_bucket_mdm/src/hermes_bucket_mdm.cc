@@ -236,6 +236,10 @@ class Server : public TaskLib {
       tag_info.tag_id_ = tag_id;
       tag_info.owner_ = task->blob_owner_;
       tag_info.internal_size_ = task->backend_size_;
+      hipc::vector<TraitId> &traits = *task->traits_;
+      if (traits.size()) {
+        tag_info.trait_id_ = traits[0];
+      }
       if (task->flags_.Any(HERMES_SHOULD_STAGE)) {
         stager_mdm_.AsyncRegisterStager(task->task_node_ + 1,
                                         tag_id,

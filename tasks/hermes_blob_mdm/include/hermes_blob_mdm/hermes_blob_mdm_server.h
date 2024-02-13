@@ -5,9 +5,6 @@
 #ifndef HERMES_TASKS_HERMES_BLOB_MDM_SRC_HERMES_BLOB_MDM_SERVER_H_
 #define HERMES_TASKS_HERMES_BLOB_MDM_SRC_HERMES_BLOB_MDM_SERVER_H_
 
-//
-// Created by lukemartinlogan on 6/29/23.
-//
 #include "hrun_admin/hrun_admin.h"
 #include "hrun/api/hrun_runtime.h"
 #include "hermes/config_server.h"
@@ -379,9 +376,7 @@ class Server : public TaskLib {
       HILOG(kDebug, "This is marked as a file: {} {}",
             blob_info.mod_count_, blob_info.last_flush_);
     }
-    ssize_t bkt_size_diff = 0;
     if (task->flags_.Any(HERMES_BLOB_REPLACE)) {
-      bkt_size_diff -= blob_info.blob_size_;
       PutBlobFreeBuffersPhase(blob_info, task, rctx);
     }
 

@@ -22,6 +22,7 @@
 #include "hermes/config_client.h"
 #include "hermes/config_server.h"
 #include "data_stager/data_stager.h"
+#include "hermes_default_trait/hermes_default_trait.h"
 
 namespace hermes {
 
@@ -32,6 +33,7 @@ class ConfigurationManager {
   blob_mdm::Client blob_mdm_;
   data_stager::Client stager_mdm_;
   data_op::Client op_mdm_;
+  hermes::traits::default_trait::Client default_trait_;
   ServerConfig server_config_;
   ClientConfig client_config_;
   bool is_initialized_ = false;
@@ -61,6 +63,7 @@ class ConfigurationManager {
                                stager_mdm_.id_, op_mdm_.id_);
     bkt_mdm_.SetBlobMdmRoot(DomainId::GetGlobal(),
                             blob_mdm_.id_, stager_mdm_.id_);
+    default_trait_.CreateRoot(DomainId::GetGlobal(), "hermes_default_trait");
     is_initialized_ = true;
   }
 

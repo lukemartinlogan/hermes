@@ -43,7 +43,12 @@ class Server : public TaskLib {
     BlobInfo &blob_info = *task->blob_info_;
     blob_mdm::PutBlobTask *put_task = task->put_blob_task_;
     blob_mdm::Server *blob_mdm = task->blob_mdm_state_;
-    size_t bkt_size_diff = 0;
+    ssize_t bkt_size_diff = 0;
+
+    // Subtract bkt size if replacing the blob
+    if (put_task->flags_.Any(HERMES_BLOB_REPLACE)) {
+      bkt_size_diff -= blob_info.blob_size_;
+    }
 
     // Determine amount of additional buffering space needed
     size_t needed_space = put_task->blob_off_ + put_task->data_size_;
@@ -75,7 +80,7 @@ class Server : public TaskLib {
         SubPlacement &placement = schema.plcmnts_[sub_idx];
         TargetInfo &bdev = *blob_mdm->target_map_[placement.tid_];
         LPointer<bdev::AllocateTask> alloc_task =
-            bdev.AsyncAllocate(put_task->task_node_ + 1,
+            bdev.AsyncAllocate(task->task_node_ + 1,
                                blob_info.score_,
                                placement.size_,
                                blob_info.buffers_);
@@ -121,7 +126,7 @@ class Server : public TaskLib {
         HILOG(kDebug, "Writing {} bytes at off {} from target {}", buf_size, tgt_off, buf.tid_)
         TargetInfo &target = *blob_mdm->target_map_[buf.tid_];
         LPointer<bdev::WriteTask> write_task =
-            target.AsyncWrite(put_task->task_node_ + 1,
+            target.AsyncWrite(task->task_node_ + 1,
                               blob_buf + buf_off,
                               tgt_off, buf_size);
         write_tasks.emplace_back(write_task);
@@ -140,31 +145,31 @@ class Server : public TaskLib {
 
     // Update information
     if (put_task->flags_.Any(HERMES_SHOULD_STAGE)) {
-      blob_mdm->stager_mdm_.AsyncUpdateSize(put_task->task_node_ + 1,
+      blob_mdm->stager_mdm_.AsyncUpdateSize(task->task_node_ + 1,
                                             put_task->tag_id_,
                                             blob_info.name_,
                                             put_task->blob_off_,
                                             put_task->data_size_, 0);
     } else {
-      blob_mdm->bkt_mdm_.AsyncUpdateSize(put_task->task_node_ + 1,
+      blob_mdm->bkt_mdm_.AsyncUpdateSize(task->task_node_ + 1,
                                          put_task->tag_id_,
                                          bkt_size_diff,
                                          bucket_mdm::UpdateSizeMode::kAdd);
     }
     if (put_task->flags_.Any(HERMES_BLOB_DID_CREATE)) {
-      blob_mdm->bkt_mdm_.AsyncTagAddBlob(put_task->task_node_ + 1,
+      blob_mdm->bkt_mdm_.AsyncTagAddBlob(task->task_node_ + 1,
                                          put_task->tag_id_,
                                          put_task->blob_id_);
     }
     if (put_task->flags_.Any(HERMES_HAS_DERIVED)) {
-      blob_mdm->op_mdm_.AsyncRegisterData(put_task->task_node_ + 1,
+      blob_mdm->op_mdm_.AsyncRegisterData(task->task_node_ + 1,
                                           put_task->tag_id_,
                                           put_task->blob_name_->str(),
                                           put_task->blob_id_,
                                           put_task->blob_off_,
                                           put_task->data_size_);
     }
-    put_task->SetModuleComplete();
+    task->SetModuleComplete();
   }
   void MonitorEncode(u32 mode, EncodeTask *task, RunContext &rctx) {
   }

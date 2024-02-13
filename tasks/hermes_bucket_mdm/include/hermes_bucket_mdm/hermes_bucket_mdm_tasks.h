@@ -354,7 +354,6 @@ struct GetOrCreateTagTask : public Task, TaskFlags<TF_SRL_SYM> {
   IN hipc::ShmArchive<hipc::vector<TraitId>> traits_;
   IN size_t backend_size_;
   IN bitfield32_t flags_;
-  IN TaskStateId trait_id_;
   OUT TagId tag_id_;
 
   /** SHM default constructor */
@@ -388,7 +387,6 @@ struct GetOrCreateTagTask : public Task, TaskFlags<TF_SRL_SYM> {
     HSHM_MAKE_AR(traits_, alloc, traits)
     HSHM_MAKE_AR(params_, alloc, ctx.bkt_params_)
     flags_ = bitfield32_t(flags | ctx.flags_.bits_);
-    trait_id_ = ctx.trait_id_;
   }
 
   /** Destructor */
@@ -403,7 +401,7 @@ struct GetOrCreateTagTask : public Task, TaskFlags<TF_SRL_SYM> {
   void SerializeStart(Ar &ar) {
     task_serialize<Ar>(ar);
     ar(tag_name_, blob_owner_, traits_, backend_size_,
-       flags_, params_, trait_id_);
+       flags_, params_);
   }
 
   /** (De)serialize message return */

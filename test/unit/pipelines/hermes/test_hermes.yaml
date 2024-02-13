@@ -1,4 +1,4 @@
-name: hermes_unit_hermes_mpiio_basic_large
+name: test_hermes_native_api
 env: hermes
 pkgs:
   - pkg_type: hermes_run

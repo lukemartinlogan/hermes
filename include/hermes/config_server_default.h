@@ -193,6 +193,7 @@ const inline char* kHermesServerDefaultConfigStr =
 "  \'hermes_blob_mdm\',\n"
 "  \'hermes_bucket_mdm\',\n"
 "  \'hermes_data_op\',\n"
+"  \'hermes_default_trait\',\n"
 "  \'data_stager\',\n"
 "  \'posix_bdev\',\n"
 "  \'ram_bdev\'\n"

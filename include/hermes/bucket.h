@@ -52,7 +52,8 @@ class Bucket {
     bkt_mdm_ = &HERMES_CONF->bkt_mdm_;
     id_ = bkt_mdm_->GetOrCreateTagRoot(
         hshm::charbuf(bkt_name), true,
-        std::vector<TraitId>(), backend_size, flags);
+        (std::vector<TraitId>){HERMES_CONF->default_trait_.id_},
+        backend_size, flags);
     name_ = bkt_name;
   }
 
@@ -71,7 +72,8 @@ class Bucket {
     bkt_mdm_ = &HERMES_CONF->bkt_mdm_;
     id_ = bkt_mdm_->GetOrCreateTagRoot(
         hshm::charbuf(bkt_name), true,
-        std::vector<TraitId>(), backend_size, flags, ctx);
+        (std::vector<TraitId>){HERMES_CONF->default_trait_.id_},
+        backend_size, flags, ctx);
     name_ = bkt_name;
   }
 
@@ -156,6 +158,14 @@ class Bucket {
    * */
   bool IsNull() {
     return id_.IsNull();
+  }
+
+  /**
+   * Set the trait of this bucket
+   * */
+  void SetTrait(TraitType trait_type, TraitId trait_id) {
+    bkt_mdm_->SetTagTraitRoot(DomainId::GetGlobal(), id_,
+                              trait_type, trait_id);
   }
 
  public:

@@ -103,7 +103,7 @@ struct EncodeTask : public Task, TaskFlags<TF_LOCAL> {
     prio_ = TaskPrio::kLowLatency;
     task_state_ = state_id;
     method_ = Method::kEncode;
-    task_flags_.SetBits(0);
+    task_flags_.SetBits(TASK_LOW_LATENCY | TASK_COROUTINE);
     domain_id_ = domain_id;
 
     // Custom params
@@ -145,8 +145,8 @@ struct DecodeTask : public Task, TaskFlags<TF_LOCAL> {
     lane_hash_ = 0;
     prio_ = TaskPrio::kLowLatency;
     task_state_ = state_id;
-    method_ = Method::kEncode;
-    task_flags_.SetBits(0);
+    method_ = Method::kDecode;
+    task_flags_.SetBits(TASK_LOW_LATENCY | TASK_COROUTINE);
     domain_id_ = domain_id;
 
     // Custom params

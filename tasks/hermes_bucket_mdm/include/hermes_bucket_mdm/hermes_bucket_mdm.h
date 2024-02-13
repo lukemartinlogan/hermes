@@ -136,7 +136,8 @@ class Client : public TaskLibClient {
                            u32 flags,
                            const Context &ctx = Context()) {
     LPointer<hrunpq::TypedPushTask<GetOrCreateTagTask>> push_task =
-        AsyncGetOrCreateTagRoot(tag_name, blob_owner, traits, backend_size, flags, ctx);
+        AsyncGetOrCreateTagRoot(tag_name, blob_owner, traits,
+                                backend_size, flags, ctx);
     push_task->Wait();
     GetOrCreateTagTask *task = push_task->get();
     TagId tag_id = task->tag_id_;
