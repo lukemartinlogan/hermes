@@ -72,66 +72,6 @@ struct DestructTask : public DestroyTaskStateTask {
   }
 };
 
-/**
- * A custom task in hermes_encoder_trait
- * */
-struct CustomTask : public Task, TaskFlags<TF_SRL_SYM> {
-  /** SHM default constructor */
-  HSHM_ALWAYS_INLINE explicit
-  CustomTask(hipc::Allocator *alloc) : Task(alloc) {}
-
-  /** Emplace constructor */
-  HSHM_ALWAYS_INLINE explicit
-  CustomTask(hipc::Allocator *alloc,
-             const TaskNode &task_node,
-             const DomainId &domain_id,
-             const TaskStateId &state_id) : Task(alloc) {
-    // Initialize task
-    task_node_ = task_node;
-    lane_hash_ = 0;
-    prio_ = TaskPrio::kLowLatency;
-    task_state_ = state_id;
-    method_ = Method::kCustom;
-    task_flags_.SetBits(0);
-    domain_id_ = domain_id;
-
-    // Custom params
-  }
-
-  /** (De)serialize message call */
-  template<typename Ar>
-  void SerializeStart(Ar &ar) {
-    task_serialize<Ar>(ar);
-  }
-
-  /** (De)serialize message return */
-  template<typename Ar>
-  void SerializeEnd(u32 replica, Ar &ar) {
-  }
-
-  /** Duplicate message */
-  void Dup(hipc::Allocator *alloc, CustomTask &other) {
-    task_dup(other);
-  }
-
-  /** Process duplicate message output */
-  void DupEnd(u32 replica, CustomTask &dup_task) {
-  }
-
-  /** Begin replication */
-  void ReplicateStart(u32 count) {
-  }
-
-  /** Finalize replication */
-  void ReplicateEnd() {}
-
-  /** Create group */
-  HSHM_ALWAYS_INLINE
-  u32 GetGroup(hshm::charbuf &group) {
-    return TASK_UNORDERED;
-  }
-};
-
 }  // namespace hermes::traits::encoder_trait
 
 #endif  // HRUN_TASKS_TASK_TEMPL_INCLUDE_hermes_encoder_trait_hermes_encoder_trait_TASKS_H_

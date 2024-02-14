@@ -1,5 +1,5 @@
-#ifndef HRUN_hermes_encoder_trait_LIB_EXEC_H_
-#define HRUN_hermes_encoder_trait_LIB_EXEC_H_
+#ifndef HRUN_HERMES_ENCODER_TRAIT_LIB_EXEC_H_
+#define HRUN_HERMES_ENCODER_TRAIT_LIB_EXEC_H_
 
 /** Execute a task */
 void Run(u32 method, Task *task, RunContext &rctx) override {
@@ -12,8 +12,12 @@ void Run(u32 method, Task *task, RunContext &rctx) override {
       Destruct(reinterpret_cast<DestructTask *>(task), rctx);
       break;
     }
-    case Method::kCustom: {
-      Custom(reinterpret_cast<CustomTask *>(task), rctx);
+    case Method::kEncode: {
+      Encode(reinterpret_cast<EncodeTask *>(task), rctx);
+      break;
+    }
+    case Method::kDecode: {
+      Decode(reinterpret_cast<DecodeTask *>(task), rctx);
       break;
     }
   }
@@ -29,8 +33,12 @@ void Monitor(u32 mode, Task *task, RunContext &rctx) override {
       MonitorDestruct(mode, reinterpret_cast<DestructTask *>(task), rctx);
       break;
     }
-    case Method::kCustom: {
-      MonitorCustom(mode, reinterpret_cast<CustomTask *>(task), rctx);
+    case Method::kEncode: {
+      MonitorEncode(mode, reinterpret_cast<EncodeTask *>(task), rctx);
+      break;
+    }
+    case Method::kDecode: {
+      MonitorDecode(mode, reinterpret_cast<DecodeTask *>(task), rctx);
       break;
     }
   }
@@ -46,8 +54,12 @@ void Del(u32 method, Task *task) override {
       HRUN_CLIENT->DelTask<DestructTask>(reinterpret_cast<DestructTask *>(task));
       break;
     }
-    case Method::kCustom: {
-      HRUN_CLIENT->DelTask<CustomTask>(reinterpret_cast<CustomTask *>(task));
+    case Method::kEncode: {
+      HRUN_CLIENT->DelTask<EncodeTask>(reinterpret_cast<EncodeTask *>(task));
+      break;
+    }
+    case Method::kDecode: {
+      HRUN_CLIENT->DelTask<DecodeTask>(reinterpret_cast<DecodeTask *>(task));
       break;
     }
   }
@@ -63,8 +75,12 @@ void Dup(u32 method, Task *orig_task, std::vector<LPointer<Task>> &dups) overrid
       hrun::CALL_DUPLICATE(reinterpret_cast<DestructTask*>(orig_task), dups);
       break;
     }
-    case Method::kCustom: {
-      hrun::CALL_DUPLICATE(reinterpret_cast<CustomTask*>(orig_task), dups);
+    case Method::kEncode: {
+      hrun::CALL_DUPLICATE(reinterpret_cast<EncodeTask*>(orig_task), dups);
+      break;
+    }
+    case Method::kDecode: {
+      hrun::CALL_DUPLICATE(reinterpret_cast<DecodeTask*>(orig_task), dups);
       break;
     }
   }
@@ -80,8 +96,12 @@ void DupEnd(u32 method, u32 replica, Task *orig_task, Task *dup_task) override {
       hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<DestructTask*>(orig_task), reinterpret_cast<DestructTask*>(dup_task));
       break;
     }
-    case Method::kCustom: {
-      hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<CustomTask*>(orig_task), reinterpret_cast<CustomTask*>(dup_task));
+    case Method::kEncode: {
+      hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<EncodeTask*>(orig_task), reinterpret_cast<EncodeTask*>(dup_task));
+      break;
+    }
+    case Method::kDecode: {
+      hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<DecodeTask*>(orig_task), reinterpret_cast<DecodeTask*>(dup_task));
       break;
     }
   }
@@ -97,8 +117,12 @@ void ReplicateStart(u32 method, u32 count, Task *task) override {
       hrun::CALL_REPLICA_START(count, reinterpret_cast<DestructTask*>(task));
       break;
     }
-    case Method::kCustom: {
-      hrun::CALL_REPLICA_START(count, reinterpret_cast<CustomTask*>(task));
+    case Method::kEncode: {
+      hrun::CALL_REPLICA_START(count, reinterpret_cast<EncodeTask*>(task));
+      break;
+    }
+    case Method::kDecode: {
+      hrun::CALL_REPLICA_START(count, reinterpret_cast<DecodeTask*>(task));
       break;
     }
   }
@@ -114,8 +138,12 @@ void ReplicateEnd(u32 method, Task *task) override {
       hrun::CALL_REPLICA_END(reinterpret_cast<DestructTask*>(task));
       break;
     }
-    case Method::kCustom: {
-      hrun::CALL_REPLICA_END(reinterpret_cast<CustomTask*>(task));
+    case Method::kEncode: {
+      hrun::CALL_REPLICA_END(reinterpret_cast<EncodeTask*>(task));
+      break;
+    }
+    case Method::kDecode: {
+      hrun::CALL_REPLICA_END(reinterpret_cast<DecodeTask*>(task));
       break;
     }
   }
@@ -131,8 +159,12 @@ std::vector<DataTransfer> SaveStart(u32 method, BinaryOutputArchive<true> &ar, T
       ar << *reinterpret_cast<DestructTask*>(task);
       break;
     }
-    case Method::kCustom: {
-      ar << *reinterpret_cast<CustomTask*>(task);
+    case Method::kEncode: {
+      ar << *reinterpret_cast<EncodeTask*>(task);
+      break;
+    }
+    case Method::kDecode: {
+      ar << *reinterpret_cast<DecodeTask*>(task);
       break;
     }
   }
@@ -152,9 +184,14 @@ TaskPointer LoadStart(u32 method, BinaryInputArchive<true> &ar) override {
       ar >> *reinterpret_cast<DestructTask*>(task_ptr.ptr_);
       break;
     }
-    case Method::kCustom: {
-      task_ptr.ptr_ = HRUN_CLIENT->NewEmptyTask<CustomTask>(task_ptr.shm_);
-      ar >> *reinterpret_cast<CustomTask*>(task_ptr.ptr_);
+    case Method::kEncode: {
+      task_ptr.ptr_ = HRUN_CLIENT->NewEmptyTask<EncodeTask>(task_ptr.shm_);
+      ar >> *reinterpret_cast<EncodeTask*>(task_ptr.ptr_);
+      break;
+    }
+    case Method::kDecode: {
+      task_ptr.ptr_ = HRUN_CLIENT->NewEmptyTask<DecodeTask>(task_ptr.shm_);
+      ar >> *reinterpret_cast<DecodeTask*>(task_ptr.ptr_);
       break;
     }
   }
@@ -171,8 +208,12 @@ std::vector<DataTransfer> SaveEnd(u32 method, BinaryOutputArchive<false> &ar, Ta
       ar << *reinterpret_cast<DestructTask*>(task);
       break;
     }
-    case Method::kCustom: {
-      ar << *reinterpret_cast<CustomTask*>(task);
+    case Method::kEncode: {
+      ar << *reinterpret_cast<EncodeTask*>(task);
+      break;
+    }
+    case Method::kDecode: {
+      ar << *reinterpret_cast<DecodeTask*>(task);
       break;
     }
   }
@@ -189,8 +230,12 @@ void LoadEnd(u32 replica, u32 method, BinaryInputArchive<false> &ar, Task *task)
       ar.Deserialize(replica, *reinterpret_cast<DestructTask*>(task));
       break;
     }
-    case Method::kCustom: {
-      ar.Deserialize(replica, *reinterpret_cast<CustomTask*>(task));
+    case Method::kEncode: {
+      ar.Deserialize(replica, *reinterpret_cast<EncodeTask*>(task));
+      break;
+    }
+    case Method::kDecode: {
+      ar.Deserialize(replica, *reinterpret_cast<DecodeTask*>(task));
       break;
     }
   }
@@ -204,11 +249,14 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
     case Method::kDestruct: {
       return reinterpret_cast<DestructTask*>(task)->GetGroup(group);
     }
-    case Method::kCustom: {
-      return reinterpret_cast<CustomTask*>(task)->GetGroup(group);
+    case Method::kEncode: {
+      return reinterpret_cast<EncodeTask*>(task)->GetGroup(group);
+    }
+    case Method::kDecode: {
+      return reinterpret_cast<DecodeTask*>(task)->GetGroup(group);
     }
   }
   return -1;
 }
 
-#endif  // HRUN_hermes_encoder_trait_METHODS_H_
+#endif  // HRUN_HERMES_ENCODER_TRAIT_METHODS_H_

@@ -54,21 +54,6 @@ class Client : public TaskLibClient {
   void DestroyRoot(const DomainId &domain_id) {
     HRUN_ADMIN->DestroyTaskStateRoot(domain_id, id_);
   }
-
-  /** Call a custom method */
-  HSHM_ALWAYS_INLINE
-  void AsyncCustomConstruct(CustomTask *task,
-                            const TaskNode &task_node,
-                            const DomainId &domain_id) {
-    HRUN_CLIENT->ConstructTask<CustomTask>(
-        task, task_node, domain_id, id_);
-  }
-  HSHM_ALWAYS_INLINE
-  void CustomRoot(const DomainId &domain_id) {
-    LPointer<hrunpq::TypedPushTask<CustomTask>> task = AsyncCustomRoot(domain_id);
-    task.ptr_->Wait();
-  }
-  HRUN_TASK_NODE_PUSH_ROOT(Custom);
 };
 
 }  // namespace hrun

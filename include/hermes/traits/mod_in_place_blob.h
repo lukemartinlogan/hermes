@@ -23,15 +23,10 @@ class ModInPlaceBlob {
     }
   }
 
-  static void WriteToBlob(Task *task,
-                          BlobInfo &blob_info,
-                          Blob &blob,
-                          size_t real_blob_off,
-                          ssize_t bkt_size_diff,
-                          std::vector<PlacementSchema> &schema_vec,
-                          blob_mdm::Server *blob_mdm,
-                          bitfield32_t &flags) {
-    // Allocate blob buffers
+  static void AllocateBlobBuffers(Task *task,
+                                  BlobInfo &blob_info,
+                                  std::vector<PlacementSchema> &schema_vec,
+                                  blob_mdm::Server *blob_mdm) {
     for (PlacementSchema &schema : schema_vec) {
       schema.plcmnts_.emplace_back(0, blob_mdm->fallback_target_->id_);
       for (size_t sub_idx = 0; sub_idx < schema.plcmnts_.size(); ++sub_idx) {
@@ -56,7 +51,15 @@ class ModInPlaceBlob {
         HRUN_CLIENT->DelTask(alloc_task);
       }
     }
+  }
 
+  static void WriteToBlob(Task *task,
+                          BlobInfo &blob_info,
+                          Blob &blob,
+                          size_t real_blob_off,
+                          ssize_t bkt_size_diff,
+                          blob_mdm::Server *blob_mdm,
+                          bitfield32_t &flags) {
     // Place blob in buffers
     std::vector<LPointer<bdev::WriteTask>> write_tasks;
     write_tasks.reserve(blob_info.buffers_.size());

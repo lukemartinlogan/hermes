@@ -23,13 +23,16 @@ namespace hermes::traits::encoder_trait {
 
 class Encoder {
  public:
-  static void Encode(std::vector<PlacementSchema> &schema,
+  static void Encode(std::vector<BufferInfo> &buffers,
+                     size_t real_blob_off,
                      hapi::Blob &encoded_blob,
                      hapi::Blob &decoded_blob) {
     // Encode the blob
   }
 
-  static void Decode(hapi::Blob &decoded_blob,
+  static void Decode(std::vector<BufferInfo> &buffers,
+                     size_t real_blob_off,
+                     hapi::Blob &decoded_blob,
                      hapi::Blob &encoded_blob) {
     // Decode the blob
   }

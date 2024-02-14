@@ -45,6 +45,12 @@ class EncodeBlob {
       dpe->Placement({size_diff}, blob_mdm->targets_, ctx, schema_vec);
     }
 
+    // Allocate blob buffers
+    ModInPlaceBlob::AllocateBlobBuffers(task,
+                                        blob_info,
+                                        schema_vec,
+                                        blob_mdm);
+
     if (blob_info.blob_size_ > 0) {
       // Read blob
       ModInPlaceBlob::ReadFromBlob(task,
@@ -57,20 +63,20 @@ class EncodeBlob {
       // Decode & modify the blob
       hapi::Blob decoded_blob(HRUN_CLIENT->rdata_alloc_,
                               blob_info.logical_blob_size_);
-      EncoderT::Decode(decoded_blob, encoded_blob);
+      EncoderT::Decode(blob_info.buffers_, 0, decoded_blob, encoded_blob);
       memcpy(decoded_blob.data() + logical_blob_off,
              blob.data(), blob.size());
-      EncoderT::Encode(schema_vec, encoded_blob, decoded_blob);
+      EncoderT::Encode(blob_info.buffers_, 0, encoded_blob, decoded_blob);
     } else if (logical_blob_off > 0) {
       // Encode the blob
       hapi::Blob decoded_blob(HRUN_CLIENT->rdata_alloc_,
                               blob_info.logical_blob_size_);
       memcpy(decoded_blob.data() + logical_blob_off,
              blob.data(), blob.size());
-      EncoderT::Encode(schema_vec, encoded_blob, decoded_blob);
+      EncoderT::Encode(blob_info.buffers_, 0, encoded_blob, decoded_blob);
     } else {
       // Encode the blob
-      EncoderT::Encode(schema_vec, encoded_blob, blob);
+      EncoderT::Encode(blob_info.buffers_, 0, encoded_blob, blob);
     }
 
     // Write the encoded blob
@@ -80,7 +86,6 @@ class EncodeBlob {
                                 encoded_blob,
                                 0,
                                 bkt_size_diff,
-                                schema_vec,
                                 blob_mdm,
                                 blob_info.flags_);
   }
@@ -107,12 +112,12 @@ class EncodeBlob {
     if (logical_blob_off > 0 || blob.size() < blob_info.logical_blob_size_) {
       hapi::Blob decoded_blob(HRUN_CLIENT->rdata_alloc_,
                               blob_info.logical_blob_size_);
-      EncoderT::Decode(decoded_blob, encoded_blob);
+      EncoderT::Decode(blob_info.buffers_, 0, decoded_blob, encoded_blob);
       memcpy(blob.data(),
              decoded_blob.data() + logical_blob_off,
              blob.size());
     } else {
-      EncoderT::Decode(blob, encoded_blob);
+      EncoderT::Decode(blob_info.buffers_, 0, blob, encoded_blob);
     }
   }
 };

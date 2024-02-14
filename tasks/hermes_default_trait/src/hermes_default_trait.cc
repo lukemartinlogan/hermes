@@ -77,12 +77,15 @@ class Server : public TaskLib {
     // Write blob to buffers
     hapi::Blob blob(HRUN_CLIENT->GetDataPointer(put_task->data_),
                     put_task->data_size_);
+    ModInPlaceBlob::AllocateBlobBuffers(task,
+                                        blob_info,
+                                        schema_vec,
+                                        blob_mdm);
     ModInPlaceBlob::WriteToBlob(task,
                                 blob_info,
                                 blob,
                                 put_task->blob_off_,
                                 bkt_size_diff,
-                                schema_vec,
                                 blob_mdm,
                                 blob_info.flags_);
     task->SetModuleComplete();
