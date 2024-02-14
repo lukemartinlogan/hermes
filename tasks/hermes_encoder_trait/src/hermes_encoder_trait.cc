@@ -12,27 +12,41 @@
 
 #include "hrun_admin/hrun_admin.h"
 #include "hrun/api/hrun_runtime.h"
-#include "hermes_default_trait/hermes_default_trait.h"
-#include "hermes/hermes_types.h"
+#include "hermes_encoder_trait/hermes_encoder_trait.h"
 #include "hermes_blob_mdm/hermes_blob_mdm_tasks.h"
-#include "hermes/dpe/dpe_factory.h"
 #include "hermes_blob_mdm/hermes_blob_mdm_server.h"
 #include "hermes/traits/mod_in_place_blob.h"
+#include "hermes/traits/encoded_blob.h"
+#include "hermes/dpe/dpe_factory.h"
 
-namespace hermes::traits::default_trait {
+namespace hermes::traits::encoder_trait {
+
+class Encoder {
+ public:
+  static void Encode(std::vector<PlacementSchema> &schema,
+                     hapi::Blob &encoded_blob,
+                     hapi::Blob &decoded_blob) {
+    // Encode the blob
+  }
+
+  static void Decode(hapi::Blob &decoded_blob,
+                     hapi::Blob &encoded_blob) {
+    // Decode the blob
+  }
+};
 
 class Server : public TaskLib {
  public:
   Server() = default;
 
-  /** Construct hermes_default_trait */
+  /** Construct hermes_encoder_trait */
   void Construct(ConstructTask *task, RunContext &rctx) {
     task->SetModuleComplete();
   }
   void MonitorConstruct(u32 mode, ConstructTask *task, RunContext &rctx) {
   }
 
-  /** Destroy hermes_default_trait */
+  /** Destroy hermes_encoder_trait */
   void Destruct(DestructTask *task, RunContext &rctx) {
     task->SetModuleComplete();
   }
@@ -44,47 +58,17 @@ class Server : public TaskLib {
     BlobInfo &blob_info = *task->blob_info_;
     blob_mdm::PutBlobTask *put_task = task->put_blob_task_;
     blob_mdm::Server *blob_mdm = task->blob_mdm_state_;
-    ssize_t bkt_size_diff = 0;
 
     // Subtract bkt size if replacing the blob
-    if (put_task->flags_.Any(HERMES_BLOB_REPLACE)) {
-      bkt_size_diff -= blob_info.blob_size_;
-    }
-
-    // Determine amount of additional buffering space needed
-    size_t needed_space = put_task->blob_off_ + put_task->data_size_;
-    size_t size_diff = 0;
-    if (needed_space > blob_info.max_blob_size_) {
-      size_diff = needed_space - blob_info.max_blob_size_;
-    }
-    size_t min_blob_size = put_task->blob_off_ + put_task->data_size_;
-    if (min_blob_size > blob_info.blob_size_) {
-      blob_info.blob_size_ = put_task->blob_off_ + put_task->data_size_;
-    }
-    bkt_size_diff += (ssize_t)size_diff;
-    HILOG(kDebug, "The size diff is {} bytes (bkt diff {})",
-          size_diff, bkt_size_diff)
-
-    // Use DPE
-    std::vector<PlacementSchema> schema_vec;
-    if (size_diff > 0) {
-      Context ctx;
-      auto *dpe = DpeFactory::Get(ctx.dpe_);
-      ctx.blob_score_ = put_task->score_;
-      dpe->Placement({size_diff}, blob_mdm->targets_, ctx, schema_vec);
-    }
-
-    // Write blob to buffers
     hapi::Blob blob(HRUN_CLIENT->GetDataPointer(put_task->data_),
                     put_task->data_size_);
-    ModInPlaceBlob::WriteToBlob(task,
+    EncodeBlob<Encoder>::Encode(task,
                                 blob_info,
                                 blob,
                                 put_task->blob_off_,
-                                bkt_size_diff,
-                                schema_vec,
-                                blob_mdm,
-                                blob_info.flags_);
+                                put_task->flags_,
+                                put_task->score_,
+                                blob_mdm);
     task->SetModuleComplete();
   }
   void MonitorEncode(u32 mode, EncodeTask *task, RunContext &rctx) {
@@ -93,27 +77,25 @@ class Server : public TaskLib {
   /** A decoding method */
   void Decode(DecodeTask *task, RunContext &rctx) {
     BlobInfo &blob_info = *task->blob_info_;
-    GetBlobTask *get_task = task->get_blob_task_;
+    blob_mdm::GetBlobTask *get_task = task->get_blob_task_;
     blob_mdm::Server *blob_mdm = task->blob_mdm_state_;
 
-    // Read blob from buffers
     hapi::Blob blob(HRUN_CLIENT->GetDataPointer(get_task->data_),
-                    get_task->data_size_);
-    get_task->data_size_ = ModInPlaceBlob::ReadFromBlob(task,
-                                                        blob_info,
-                                                        blob,
-                                                        get_task->blob_off_,
-                                                        blob_mdm,
-                                                        blob_info.flags_);
+                    blob_info.logical_blob_size_);
+    EncodeBlob<Encoder>::Decode(task,
+                                blob_info,
+                                blob,
+                                get_task->blob_off_,
+                                get_task->flags_,
+                                blob_mdm);
     task->SetModuleComplete();
   }
   void MonitorDecode(u32 mode, DecodeTask *task, RunContext &rctx) {
   }
-
  public:
-#include "hermes_default_trait/hermes_default_trait_lib_exec.h"
+#include "hermes_encoder_trait/hermes_encoder_trait_lib_exec.h"
 };
 
-}  // namespace hermes::traits::default_trait
+}  // namespace hermes::traits::encoder_trait
 
-HRUN_TASK_CC(hermes::traits::default_trait::Server, "hermes_default_trait");
+HRUN_TASK_CC(hermes::traits::encoder_trait::Server, "hermes_encoder_trait");

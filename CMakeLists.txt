@@ -259,7 +259,7 @@ include_directories(${CMAKE_SOURCE_DIR}/tasks/data_stager/include)
 include_directories(${CMAKE_SOURCE_DIR}/tasks/hermes_data_op/include)
 include_directories(${CMAKE_SOURCE_DIR}/tasks/hermes_traits/include)
 include_directories(${CMAKE_SOURCE_DIR}/tasks/hermes_default_trait/include)
-include_directories(${CMAKE_SOURCE_DIR}/tasks/hermes_default_trait/include)
+include_directories(${CMAKE_SOURCE_DIR}/tasks/hermes_encoder_trait/include)
 # Test includes
 include_directories(${CMAKE_SOURCE_DIR}/test/unit)
 

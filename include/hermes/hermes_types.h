@@ -271,22 +271,73 @@ struct BufferInfo {
   }
 };
 
+/** A data structure to store logical mappings */
+struct LogicalMap {
+  size_t logical_off_;
+  size_t logical_size_;
+  size_t real_off_;
+  size_t real_size_;
+
+  LogicalMap() = default;
+
+  LogicalMap(size_t logical_off, size_t logical_size,
+             size_t real_off, size_t real_size)
+      : logical_off_(logical_off), logical_size_(logical_size),
+        real_off_(real_off), real_size_(real_size) {}
+
+  LogicalMap(const LogicalMap &other) {
+    logical_off_ = other.logical_off_;
+    logical_size_ = other.logical_size_;
+    real_off_ = other.real_off_;
+    real_size_ = other.real_size_;
+  }
+
+  LogicalMap& operator=(const LogicalMap &other) {
+    if (this != &other) {
+      logical_off_ = other.logical_off_;
+      logical_size_ = other.logical_size_;
+      real_off_ = other.real_off_;
+      real_size_ = other.real_size_;
+    }
+    return *this;
+  }
+
+  LogicalMap& operator=(LogicalMap &&other) {
+    if (this != &other) {
+      logical_off_ = other.logical_off_;
+      logical_size_ = other.logical_size_;
+      real_off_ = other.real_off_;
+      real_size_ = other.real_size_;
+    }
+    return *this;
+  }
+
+  LogicalMap(LogicalMap &&other) {
+    logical_off_ = other.logical_off_;
+    logical_size_ = other.logical_size_;
+    real_off_ = other.real_off_;
+    real_size_ = other.real_size_;
+  }
+};
+
 /** Data structure used to store Blob information */
 struct BlobInfo {
-  TagId tag_id_;    /**< Tag the blob is on */
-  BlobId blob_id_;  /**< Unique ID of the blob */
+  TagId tag_id_;        /**< Tag the blob is on */
+  BlobId blob_id_;      /**< Unique ID of the blob */
   hshm::charbuf name_;  /**< Name of the blob */
   std::vector<BufferInfo> buffers_;  /**< Set of buffers */
-  std::vector<TagId> tags_;  /**< Set of tags */
-  size_t blob_size_;      /**< The overall size of the blob */
-  size_t max_blob_size_;  /**< The amount of space current buffers support */
-  float score_;  /**< The priority of this blob */
+  std::vector<TagId> tags_;          /**< Set of tags */
+  size_t blob_size_;                 /**< The real size of the blob */
+  size_t logical_blob_size_;         /**< The logical size of the blob */
+  size_t max_blob_size_;             /**< The space current buffers support */
+  float score_;       /**< The priority of this blob */
   float user_score_;  /**< The user-defined priority of this blob */
   std::atomic<u32> access_freq_;  /**< Number of times blob accessed in epoch */
-  hshm::Timepoint last_access_;  /**< Last time blob accessed */
+  hshm::Timepoint last_access_;   /**< Last time blob accessed */
   std::atomic<size_t> mod_count_;   /**< The number of times blob modified */
   std::atomic<size_t> last_flush_;  /**< The last mod that was flushed */
-  bitfield32_t flags_;  /**< Flags */
+  bitfield32_t flags_;           /**< Flags */
+  std::vector<LogicalMap> log_;  /**< Logical -> real offsets */
 
   /** Serialization */
   template<typename Ar>
