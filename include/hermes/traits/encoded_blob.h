@@ -87,7 +87,7 @@ class EncodeBlob {
                                 0,
                                 bkt_size_diff,
                                 blob_mdm,
-                                blob_info.flags_);
+                                flags);
   }
 
   static void Decode(Task *task,
@@ -106,7 +106,7 @@ class EncodeBlob {
                                  encoded_blob,
                                  0,
                                  blob_mdm,
-                                 blob_info.flags_);
+                                 flags);
 
     // Read the part of the blob that matters
     if (logical_blob_off > 0 || blob.size() < blob_info.logical_blob_size_) {
