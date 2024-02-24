@@ -62,7 +62,7 @@ class HermesShm(CMakePackage):
         if '+compress' in self.spec:
             args.append(self.define('HERMES_ENABLE_COMPRESS', 'ON'))
         if '+encrypt' in self.spec:
-            args.append(self.define('HERMES_ENABLE_ENCRYPTION', 'ON'))
+            args.append(self.define('HERMES_ENABLE_ENCRYPT', 'ON'))
         if '+mochi' in self.spec:
             args.append(self.define('HERMES_RPC_THALLIUM', 'ON'))
         if '+zmq' in self.spec:
