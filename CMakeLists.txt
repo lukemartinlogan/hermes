@@ -169,6 +169,12 @@ endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message("Boost: ${Boost_LIBRARIES}")
 
+# Libelf
+pkg_check_modules(libelf REQUIRED libelf)
+message(STATUS "found libelf at ${libelf_INCLUDE_DIRS}")
+include_directories(${libelf_INCLUDE_DIRS})
+link_directories(${libelf_LIBRARY_DIRS})
+
 # HDF5
 if(HERMES_ENABLE_VFD)
     set(HERMES_REQUIRED_HDF5_VERSION 1.14.0)
@@ -233,6 +239,7 @@ endif()
 #-----------------------------------------------------------------------------
 # Main includes
 include_directories(${HermesShm_INCLUDE_DIRS})
+message("HermesShm: ${HermesShm_INCLUDE_DIRS}")
 include_directories(${CMAKE_SOURCE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 # Required Task includes

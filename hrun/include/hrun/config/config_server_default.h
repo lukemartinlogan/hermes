@@ -63,6 +63,7 @@ const inline char* kHrunServerDefaultConfigStr =
 "  \'hermes_blob_mdm\',\n"
 "  \'hermes_bucket_mdm\',\n"
 "  \'hermes_default_trait\',\n"
+"  \'hermes_encoder_trait\',\n"
 "  \'hermes_data_op\',\n"
 "  \'data_stager\',\n"
 "  \'posix_bdev\',\n"

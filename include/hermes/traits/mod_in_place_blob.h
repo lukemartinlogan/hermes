@@ -115,7 +115,7 @@ class ModInPlaceBlob {
       blob_mdm->bkt_mdm_.AsyncUpdateSize(task->task_node_ + 1,
                                          blob_info.tag_id_,
                                          bkt_size_diff,
-                                         bucket_mdm::UpdateSizeMode::kAdd);
+                                         UpdateSizeMode::kAdd);
     }
     if (flags.Any(HERMES_BLOB_DID_CREATE)) {
       blob_mdm->bkt_mdm_.AsyncTagAddBlob(task->task_node_ + 1,

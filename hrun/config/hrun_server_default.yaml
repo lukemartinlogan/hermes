@@ -60,6 +60,7 @@ task_registry: [
   'hermes_blob_mdm',
   'hermes_bucket_mdm',
   'hermes_default_trait',
+  'hermes_encoder_trait',
   'hermes_data_op',
   'data_stager',
   'posix_bdev',

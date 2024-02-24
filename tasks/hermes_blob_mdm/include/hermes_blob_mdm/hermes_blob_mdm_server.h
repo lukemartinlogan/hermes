@@ -725,7 +725,7 @@ class Server : public TaskLib {
           bkt_mdm_.AsyncUpdateSize(task->task_node_ + 1,
                                    task->tag_id_,
                                    -(ssize_t) blob_info.blob_size_,
-                                   bucket_mdm::UpdateSizeMode::kAdd);
+                                   UpdateSizeMode::kAdd);
         }
         HSHM_DESTROY_AR(task->free_tasks_);
         blob_map.erase(task->blob_id_);

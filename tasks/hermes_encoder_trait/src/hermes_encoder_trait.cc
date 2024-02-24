@@ -18,6 +18,7 @@
 #include "hermes/traits/mod_in_place_blob.h"
 #include "hermes/traits/encoded_blob.h"
 #include "hermes/dpe/dpe_factory.h"
+#include "hermes_shm/util/compress/compress_factory.h"
 
 namespace hermes::traits::encoder_trait {
 
@@ -28,6 +29,11 @@ class Encoder {
                      hapi::Blob &encoded_blob,
                      hapi::Blob &decoded_blob) {
     // Encode the blob
+    hshm::Lzo lzo;
+    size_t cmpr_size;
+    lzo.Compress(encoded_blob.data(), cmpr_size,
+                 decoded_blob.data(), decoded_blob.size());
+    encoded_blob.resize(cmpr_size);
   }
 
   static void Decode(std::vector<BufferInfo> &buffers,
@@ -35,6 +41,11 @@ class Encoder {
                      hapi::Blob &decoded_blob,
                      hapi::Blob &encoded_blob) {
     // Decode the blob
+    hshm::Lzo lzo;
+    size_t raw_size;
+    lzo.Decompress(decoded_blob.data(), raw_size,
+                   encoded_blob.data(), encoded_blob.size());
+    decoded_blob.resize(raw_size);
   }
 };
 
@@ -65,13 +76,15 @@ class Server : public TaskLib {
     // Subtract bkt size if replacing the blob
     hapi::Blob blob(HRUN_CLIENT->GetDataPointer(put_task->data_),
                     put_task->data_size_);
+    Encoder encoder;
     EncodeBlob<Encoder>::Encode(task,
                                 blob_info,
                                 blob,
                                 put_task->blob_off_,
                                 put_task->flags_,
                                 put_task->score_,
-                                blob_mdm);
+                                blob_mdm,
+                                encoder);
     task->SetModuleComplete();
   }
   void MonitorEncode(u32 mode, EncodeTask *task, RunContext &rctx) {
@@ -85,12 +98,14 @@ class Server : public TaskLib {
 
     hapi::Blob blob(HRUN_CLIENT->GetDataPointer(get_task->data_),
                     blob_info.logical_blob_size_);
+    Encoder encoder;
     EncodeBlob<Encoder>::Decode(task,
                                 blob_info,
                                 blob,
                                 get_task->blob_off_,
                                 get_task->flags_,
-                                blob_mdm);
+                                blob_mdm,
+                                encoder);
     task->SetModuleComplete();
   }
   void MonitorDecode(u32 mode, DecodeTask *task, RunContext &rctx) {

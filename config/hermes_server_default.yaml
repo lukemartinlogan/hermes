@@ -191,6 +191,7 @@ task_registry: [
   'hermes_bucket_mdm',
   'hermes_data_op',
   'hermes_default_trait',
+  'hermes_encoder_trait',
   'data_stager',
   'posix_bdev',
   'ram_bdev'
