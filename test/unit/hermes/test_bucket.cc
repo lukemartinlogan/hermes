@@ -16,6 +16,7 @@
 #include "hermes/hermes.h"
 #include "hermes/bucket.h"
 #include "data_stager/factory/binary_stager.h"
+#include "hermes_encoder_trait/hermes_encoder_trait.h"
 #include <mpi.h>
 
 TEST_CASE("TestHermesConnect") {
@@ -23,7 +24,7 @@ TEST_CASE("TestHermesConnect") {
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
@@ -34,7 +35,7 @@ TEST_CASE("TestHermesPut1n") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   if (rank == 0) {
     // Create a bucket
@@ -69,7 +70,7 @@ TEST_CASE("TestHermesPut") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -100,7 +101,7 @@ TEST_CASE("TestHermesAsyncPut") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -127,7 +128,7 @@ TEST_CASE("TestHermesPutGet") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   HILOG(kInfo, "WE ARE HERE!!!")
@@ -163,7 +164,7 @@ TEST_CASE("TestHermesPartialPutGet") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   HILOG(kInfo, "WE ARE HERE!!!")
@@ -210,7 +211,7 @@ TEST_CASE("TestHermesSerializedPutGet") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -242,7 +243,7 @@ TEST_CASE("TestHermesBlobDestroy") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -270,7 +271,7 @@ TEST_CASE("TestHermesBucketDestroy") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -302,7 +303,7 @@ TEST_CASE("TestHermesReorganizeBlob") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -339,7 +340,7 @@ TEST_CASE("TestHermesBucketAppend") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -375,7 +376,7 @@ TEST_CASE("TestHermesBucketAppend1n") {
 
   if (rank == 0) {
     // Initialize Hermes on all nodes
-    HERMES->ClientInit();
+    TRANSPARENT_HERMES();
 
     // Create a bucket
     hermes::Context ctx;
@@ -412,7 +413,7 @@ TEST_CASE("TestHermesMultiGetBucket") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -443,7 +444,7 @@ TEST_CASE("TestHermesGetContainedBlobIds") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -489,7 +490,7 @@ TEST_CASE("TestHermesDataStager") {
   MPI_Barrier(MPI_COMM_WORLD);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a stageable bucket
   using hermes::data_stager::BinaryFileStager;
@@ -532,7 +533,7 @@ TEST_CASE("TestHermesDataOp") {
   return;
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket that supports derived quantities
   hermes::Context ctx;
@@ -595,7 +596,7 @@ TEST_CASE("TestHermesCollectMetadata") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -619,6 +620,42 @@ TEST_CASE("TestHermesCollectMetadata") {
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
+TEST_CASE("TestHermesCompress") {
+    int rank, nprocs;
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+    // Initialize Hermes on all nodes
+    TRANSPARENT_HERMES();
+    hermes::traits::encoder_trait::Client compress_trait;
+    compress_trait.CreateRoot(DomainId::GetGlobal(), "hermes_compress_trait");
+
+    // Create a bucket
+    hermes::Context ctx;
+    ctx.trait_id_ = compress_trait.id_;
+    hermes::Bucket bkt("hello", ctx);
+
+    size_t count_per_proc = 16;
+    size_t off = rank * count_per_proc;
+    size_t proc_count = off + count_per_proc;
+    for (int rep = 0; rep < 4; ++rep) {
+        for (size_t i = off; i < proc_count; ++i) {
+            HILOG(kInfo, "Iteration: {} with blob name {}", i, std::to_string(i));
+            // Put a blob
+            hermes::Blob blob(MEGABYTES(1));
+            memset(blob.data(), i % 256, blob.size());
+            hermes::BlobId blob_id = bkt.Put(std::to_string(i), blob, ctx);
+            HILOG(kInfo, "(iteration {}) Using BlobID: {}", i, blob_id);
+            // Get a blob
+            hermes::Blob blob2;
+            bkt.Get(blob_id, blob2, ctx);
+            REQUIRE(blob.size() == blob2.size());
+            REQUIRE(blob == blob2);
+        }
+    }
+}
+
 /*
 TEST_CASE("TestHermesDataPlacement") {
   int rank, nprocs;
@@ -627,7 +664,7 @@ TEST_CASE("TestHermesDataPlacement") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;
@@ -678,7 +715,7 @@ TEST_CASE("TestHermesDataPlacementFancy") {
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Initialize Hermes on all nodes
-  HERMES->ClientInit();
+  TRANSPARENT_HERMES();
 
   // Create a bucket
   hermes::Context ctx;

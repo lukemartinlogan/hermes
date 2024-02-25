@@ -30,7 +30,7 @@ class Encoder {
                      hapi::Blob &decoded_blob) {
     // Encode the blob
     hshm::Lzo lzo;
-    size_t cmpr_size;
+    size_t cmpr_size = encoded_blob.size();
     lzo.Compress(encoded_blob.data(), cmpr_size,
                  decoded_blob.data(), decoded_blob.size());
     encoded_blob.resize(cmpr_size);
@@ -42,7 +42,7 @@ class Encoder {
                      hapi::Blob &encoded_blob) {
     // Decode the blob
     hshm::Lzo lzo;
-    size_t raw_size;
+    size_t raw_size = decoded_blob.size();
     lzo.Decompress(decoded_blob.data(), raw_size,
                    encoded_blob.data(), encoded_blob.size());
     decoded_blob.resize(raw_size);

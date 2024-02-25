@@ -70,10 +70,17 @@ class Bucket {
     mdm_ = &HERMES_CONF->mdm_;
     blob_mdm_ = &HERMES_CONF->blob_mdm_;
     bkt_mdm_ = &HERMES_CONF->bkt_mdm_;
-    id_ = bkt_mdm_->GetOrCreateTagRoot(
-        hshm::charbuf(bkt_name), true,
-        (std::vector<TraitId>){HERMES_CONF->default_trait_.id_},
-        backend_size, flags, ctx);
+    if (ctx.trait_id_.IsNull()) {
+        id_ = bkt_mdm_->GetOrCreateTagRoot(
+                hshm::charbuf(bkt_name), true,
+                (std::vector<TraitId>) {HERMES_CONF->default_trait_.id_},
+                backend_size, flags, ctx);
+    } else {
+        id_ = bkt_mdm_->GetOrCreateTagRoot(
+                hshm::charbuf(bkt_name), true,
+                (std::vector<TraitId>) {ctx.trait_id_},
+                backend_size, flags, ctx);
+    }
     name_ = bkt_name;
   }
 

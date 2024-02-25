@@ -33,7 +33,7 @@ class ConfigurationManager {
   blob_mdm::Client blob_mdm_;
   data_stager::Client stager_mdm_;
   data_op::Client op_mdm_;
-  hermes::traits::default_trait::Client default_trait_;
+  traits::default_trait::Client default_trait_;
   ServerConfig server_config_;
   ClientConfig client_config_;
   bool is_initialized_ = false;

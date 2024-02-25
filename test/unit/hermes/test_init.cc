@@ -16,7 +16,6 @@
 #include "test_init.h"
 
 void MainPretest() {
-  TRANSPARENT_HRUN();
 }
 
 void MainPosttest() {
