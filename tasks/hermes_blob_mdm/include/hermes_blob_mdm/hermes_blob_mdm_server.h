@@ -603,7 +603,7 @@ class Server : public TaskLib {
       return;
     }
     BlobInfo &blob = it->second;
-    task->size_ = blob.blob_size_;
+    task->size_ = blob.logical_blob_size_;
     task->SetModuleComplete();
   }
   void MonitorGetBlobSize(u32 mode, GetBlobSizeTask *task, RunContext &rctx) {
