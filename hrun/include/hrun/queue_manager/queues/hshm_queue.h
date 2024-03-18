@@ -134,7 +134,8 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
       LaneGroup &lane_group = (*groups_)[prio_info.prio_];
       // Initialize lanes
       HSHM_MAKE_AR0(lane_group.lanes_, GetAllocator());
-      lane_group.lanes_->reserve(prio_info.max_lanes_);
+      lane_group.lanes_->reserve(
+          prio_info.max_lanes_ * HSHM_MAX_QUEUE_GROUP_DEPTH);
       for (u32 lane_id = 0;
            lane_id < lane_group.num_lanes_ * HSHM_MAX_QUEUE_GROUP_DEPTH;
            ++lane_id) {
