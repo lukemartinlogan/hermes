@@ -79,6 +79,8 @@ class Client : public ConfigurationManager {
                               qm.shm_name_);
       mem_mngr->AttachBackend(hipc::MemoryBackendType::kPosixShmMmap,
                               qm.data_shm_name_);
+      mem_mngr->AttachBackend(hipc::MemoryBackendType::kPosixShmMmap,
+                              qm.rdata_shm_name_);
     }
     main_alloc_ = mem_mngr->GetAllocator(main_alloc_id_);
     data_alloc_ = mem_mngr->GetAllocator(data_alloc_id_);
@@ -396,7 +398,8 @@ class Client : public ConfigurationManager {
                                              Args&& ...args) {\
     hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
+                   task.ptr_->task_node_.node_depth_, task.shm_);\
     return task;\
   }\
   template<typename ...Args>\
@@ -404,7 +407,8 @@ class Client : public ConfigurationManager {
                                                       const TaskNode &task_node,\
                                                       Args&& ...args) {\
     hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
+                   task.ptr_->task_node_.node_depth_, task.shm_);\
     return task;\
   }\
   template<typename ...Args>\
@@ -428,7 +432,8 @@ class Client : public ConfigurationManager {
                                              Args&& ...args) {\
     hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
+                   task.ptr_->task_node_.node_depth_,  task.shm_);\
     return task;\
   }\
   template<typename ...Args>\
@@ -436,7 +441,8 @@ class Client : public ConfigurationManager {
                                                       const TaskNode &task_node,\
                                                       Args&& ...args) {\
     hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
+                   task.ptr_->task_node_.node_depth_, task.shm_);\
     return task;\
   }\
   template<typename ...Args>\

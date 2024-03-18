@@ -3,7 +3,7 @@ env: hermes
 pkgs:
   - pkg_type: hermes_run
     pkg_name: hermes_run
-    include: /tmp/test_hermes
+    include: /tmp/test_hermes/ior.bin
     sleep: 5
     ram: 1g
   - pkg_type: hermes_api
@@ -14,5 +14,5 @@ pkgs:
     api: mpiio
     out: /tmp/test_hermes/ior.bin
     xfer: 1m
-    block: 32g
-    nprocs: 4
+    block: 1g
+    nprocs: 6

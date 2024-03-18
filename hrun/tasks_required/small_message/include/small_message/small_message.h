@@ -43,7 +43,7 @@ class Client : public TaskLibClient {
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);
     auto task = HRUN_CLIENT->NewTask<MdTask>(
         task_node, domain_id, id_);
-    queue->Emplace(TaskPrio::kLowLatency, 3, task.shm_);
+    queue->Emplace(TaskPrio::kLowLatency, 3, 0, task.shm_);
     return task;
   }
   HRUN_TASK_NODE_ROOT(AsyncMd);

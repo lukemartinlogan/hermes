@@ -8,6 +8,8 @@
 #include "hrun/queue_manager/queue.h"
 #include "mpsc_queue.h"
 
+#define HSHM_MAX_QUEUE_GROUP_DEPTH 5
+
 namespace hrun {
 
 /** The data stored in a lane */
@@ -92,8 +94,8 @@ struct LaneGroup : public PriorityInfo {
   }
 
   /** Get lane */
-  Lane& GetLane(u32 lane_id) {
-    return (*lanes_)[lane_id];
+  Lane& GetLane(u32 lane_id, u32 depth) {
+    return (*lanes_)[lane_id * HSHM_MAX_QUEUE_GROUP_DEPTH + depth];
   }
 };
 
@@ -133,7 +135,9 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
       // Initialize lanes
       HSHM_MAKE_AR0(lane_group.lanes_, GetAllocator());
       lane_group.lanes_->reserve(prio_info.max_lanes_);
-      for (u32 lane_id = 0; lane_id < lane_group.num_lanes_; ++lane_id) {
+      for (u32 lane_id = 0;
+           lane_id < lane_group.num_lanes_ * HSHM_MAX_QUEUE_GROUP_DEPTH;
+           ++lane_id) {
         lane_group.lanes_->emplace_back(lane_group.depth_, id_);
         Lane &lane = lane_group.lanes_->back();
         lane.flags_ = prio_info.flags_;
@@ -228,56 +232,34 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
   }
 
   /** Get a lane of the queue */
-  HSHM_ALWAYS_INLINE Lane& GetLane(u32 prio, u32 lane_id) {
-    return (*(*groups_)[prio].lanes_)[lane_id];
+  HSHM_ALWAYS_INLINE Lane& GetLane(u32 prio, u32 lane_id, u32 depth) {
+    return GetLane(GetGroup(prio), lane_id, depth);
   }
 
   /** Get a lane of the queue */
-  HSHM_ALWAYS_INLINE Lane& GetLane(LaneGroup &lane_group, u32 lane_id) {
-    return (*lane_group.lanes_)[lane_id];
+  HSHM_ALWAYS_INLINE Lane& GetLane(LaneGroup &lane_group,
+                                   u32 lane_id, u32 depth) {
+    return lane_group.GetLane(lane_id, depth);
   }
 
   /** Emplace a SHM pointer to a task */
   HSHM_ALWAYS_INLINE
-  bool Emplace(u32 prio, u32 lane_hash,
+  bool Emplace(u32 prio, u32 lane_hash, u32 depth,
                hipc::Pointer &p, bool complete = false) {
-    return Emplace(prio, lane_hash, LaneData(p, complete));
-  }
-
-  /**
-   * Emplace a SHM pointer to a task if the queue utilization is less than 50%
-   * */
-  HSHM_ALWAYS_INLINE
-  bool EmplaceFrac(u32 prio, u32 lane_hash,
-                   hipc::Pointer &p, bool complete = false) {
-    return EmplaceFrac(prio, lane_hash, LaneData(p, complete));
+    return Emplace(prio, lane_hash, depth, LaneData(p, complete));
   }
 
   /** Emplace a SHM pointer to a task */
-  bool Emplace(u32 prio, u32 lane_hash, const LaneData &data) {
+  bool Emplace(u32 prio, u32 lane_hash, u32 depth, const LaneData &data) {
     if (IsEmplacePlugged()) {
       WaitForEmplacePlug();
     }
     LaneGroup &lane_group = GetGroup(prio);
     u32 lane_id = lane_hash % lane_group.num_lanes_;
-    Lane &lane = GetLane(lane_group, lane_id);
-    hshm::qtok_t ret = lane.emplace(data);
-    return !ret.IsNull();
-  }
-
-  /**
-   * Emplace a SHM pointer to a task if the queue utilization is less than 50%
-   * */
-  bool EmplaceFrac(u32 prio, u32 lane_hash, const LaneData &data) {
-    if (IsEmplacePlugged()) {
-      WaitForEmplacePlug();
+    if (depth > HSHM_MAX_QUEUE_GROUP_DEPTH) {
+      depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1;
     }
-    LaneGroup &lane_group = GetGroup(prio);
-    u32 lane_id = lane_hash % lane_group.num_lanes_;
-    Lane &lane = GetLane(lane_group, lane_id);
-    if (lane.GetSize() * 2 > lane.GetDepth()) {
-      return false;
-    }
+    Lane &lane = GetLane(lane_group, lane_id, depth);
     hshm::qtok_t ret = lane.emplace(data);
     return !ret.IsNull();
   }

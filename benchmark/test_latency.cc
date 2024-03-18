@@ -104,9 +104,9 @@ TEST_CASE("TestHshmQueueEmplacePop") {
 
   hshm::Timer t;
   t.Resume();
-  hrun::Lane &lane = queue->GetLane(0, 0);
+  hrun::Lane &lane = queue->GetLane(0, 0, 0);
   for (size_t i = 0; i < ops; ++i) {
-    queue->Emplace(0, 0, entry);
+    queue->Emplace(0, 0, 0, entry);
     lane.pop();
   }
   t.Pause();
@@ -129,7 +129,7 @@ TEST_CASE("TestHshmQueueGetLane") {
   size_t ops = (1 << 20);
   t.Resume();
   for (size_t i = 0; i < ops; ++i) {
-    queue->GetLane(0, i % group.num_lanes_);
+    queue->GetLane(0, i % group.num_lanes_, 0);
   }
   t.Pause();
 
@@ -145,7 +145,7 @@ TEST_CASE("TestHshmQueueAllocateEmplacePop") {
   };
   auto queue = hipc::make_uptr<hrun::MultiQueue>(
       qid, queue_info);
-  hrun::Lane &lane = queue->GetLane(0, 0);
+  hrun::Lane &lane = queue->GetLane(0, 0, 0);
 
   hshm::Timer t;
   size_t ops = (1 << 20);
@@ -154,7 +154,7 @@ TEST_CASE("TestHshmQueueAllocateEmplacePop") {
     hrun::LaneData entry;
     auto task = HRUN_CLIENT->NewTaskRoot<hrun::Task>();
     entry.p_ = task.shm_;
-    queue->Emplace(0, 0, entry);
+    queue->Emplace(0, 0, 0, entry);
     lane.pop();
     HRUN_CLIENT->DelTask(task);
   }

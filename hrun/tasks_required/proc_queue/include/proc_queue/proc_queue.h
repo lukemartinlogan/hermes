@@ -77,7 +77,8 @@ class Client : public TaskLibClient {
         HRUN_CLIENT->AllocateTask<hrunpq::TypedPushTask<TaskT>>();
     AsyncPushConstruct(push_task.ptr_, task_node, domain_id, subtask);
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);
-    queue->Emplace(push_task->prio_, push_task->lane_hash_, push_task.shm_);
+    queue->Emplace(push_task->prio_, push_task->lane_hash_,
+                   push_task->task_node_.node_depth_, push_task.shm_);
     return push_task;
   }
   HRUN_TASK_NODE_ROOT(AsyncPush);

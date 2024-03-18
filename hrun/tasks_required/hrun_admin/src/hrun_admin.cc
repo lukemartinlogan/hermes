@@ -144,7 +144,7 @@ class Server : public TaskLib {
         task->task_node_, DomainId::GetLocal(), task->policy_id_);
     queue_sched_ = queue_sched.ptr_;
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);
-    queue->Emplace(0, 0, queue_sched.shm_);
+    queue->Emplace(0, 0, 0, queue_sched.shm_);
     task->SetModuleComplete();
   }
   void MonitorSetWorkOrchQueuePolicy(u32 mode, SetWorkOrchQueuePolicyTask *task, RunContext &rctx) {
@@ -162,7 +162,7 @@ class Server : public TaskLib {
         task->task_node_, DomainId::GetLocal(), task->policy_id_);
     proc_sched_ = proc_sched.ptr_;
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);
-    queue->Emplace(0, 0, proc_sched.shm_);
+    queue->Emplace(0, 0, 0, proc_sched.shm_);
     task->SetModuleComplete();
   }
   void MonitorSetWorkOrchProcPolicy(u32 mode, SetWorkOrchProcPolicyTask *task, RunContext &rctx) {

@@ -38,7 +38,7 @@ struct WorkEntry {
   u32 prio_;
   u32 lane_id_;
   u32 count_;
-  Lane *lane_;
+  std::array<Lane*, HSHM_MAX_QUEUE_GROUP_DEPTH> lanes_;
   LaneGroup *group_;
   MultiQueue *queue_;
   hshm::Timepoint last_monitor_;
@@ -54,7 +54,9 @@ struct WorkEntry {
   WorkEntry(u32 prio, u32 lane_id, MultiQueue *queue)
   : prio_(prio), lane_id_(lane_id), queue_(queue) {
     group_ = &queue->GetGroup(prio);
-    lane_ = &queue->GetLane(*group_, lane_id);
+    for (u32 i = 0; i < HSHM_MAX_QUEUE_GROUP_DEPTH; ++i) {
+      lanes_[i] = &queue->GetLane(prio, lane_id, i);
+    }
     count_ = 0;
     cur_time_.Now();
   }
@@ -64,7 +66,7 @@ struct WorkEntry {
   WorkEntry(const WorkEntry &other) {
     prio_ = other.prio_;
     lane_id_ = other.lane_id_;
-    lane_ = other.lane_;
+    lanes_ = other.lanes_;
     group_ = other.group_;
     queue_ = other.queue_;
     cur_time_.Now();
@@ -76,7 +78,7 @@ struct WorkEntry {
     if (this != &other) {
       prio_ = other.prio_;
       lane_id_ = other.lane_id_;
-      lane_ = other.lane_;
+      lanes_ = other.lanes_;
       group_ = other.group_;
       queue_ = other.queue_;
       cur_time_.Now();
@@ -89,7 +91,7 @@ struct WorkEntry {
   WorkEntry(WorkEntry &&other) noexcept {
     prio_ = other.prio_;
     lane_id_ = other.lane_id_;
-    lane_ = other.lane_;
+    lanes_ = other.lanes_;
     group_ = other.group_;
     queue_ = other.queue_;
     cur_time_.Now();
@@ -101,7 +103,7 @@ struct WorkEntry {
     if (this != &other) {
       prio_ = other.prio_;
       lane_id_ = other.lane_id_;
-      lane_ = other.lane_;
+      lanes_ = other.lanes_;
       group_ = other.group_;
       queue_ = other.queue_;
       cur_time_.Now();
@@ -378,99 +380,103 @@ class Worker {
   HSHM_ALWAYS_INLINE
   void PollGrouped(WorkEntry &work_entry, bool flushing) {
     int off = 0;
-    Lane *&lane = work_entry.lane_;
     Task *task;
     LaneData *entry;
-    while (!lane->peek(entry, off).IsNull()) {
-      // Get the task message
-      if (entry->complete_) {
-        PopTask(lane, off);
-        continue;
-      }
-      task = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
-      RunContext &rctx = task->ctx_;
-      rctx.lane_id_ = work_entry.lane_id_;
-      rctx.flush_ = &flush_;
-      // Get the task state
-      TaskState *exec = HRUN_TASK_REGISTRY->GetTaskState(task->task_state_);
-      rctx.exec_ = exec;
-      if (!exec) {
-        bool was_end = HRUN_TASK_REGISTRY->task_states_.find(task->task_state_) ==
-            HRUN_TASK_REGISTRY->task_states_.end();
-        HELOG(kWarning, "(node {}) Could not find the task state: {}",
-              HRUN_CLIENT->node_id_, task->task_state_);
-        off += 1;
-        // PrintQueues();
-        // entry->complete_ = true;
-        // EndTask(lane, exec, task, off);
-        continue;
-      }
-      // Get task properties
-      bool is_remote = task->domain_id_.IsRemote(HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
-// #define HERMES_REMOTE_DEBUG
+    for (int i = 0; i < work_entry.group_->num_lanes_; ++i) {
+      Lane *&lane = work_entry.lanes_[i];
+      off = 0;
+      // HILOG(kDebug, "Polling lane {} (worker={})", lane->id_, id_
+      while (!lane->peek(entry, off).IsNull()) {
+        // Get the task message
+        if (entry->complete_) {
+          PopTask(lane, off);
+          continue;
+        }
+        task = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
+        RunContext &rctx = task->ctx_;
+        rctx.lane_id_ = work_entry.lane_id_;
+        rctx.flush_ = &flush_;
+        // Get the task state
+        TaskState *exec = HRUN_TASK_REGISTRY->GetTaskState(task->task_state_);
+        rctx.exec_ = exec;
+        if (!exec) {
+          bool was_end = HRUN_TASK_REGISTRY->task_states_.find(task->task_state_) ==
+              HRUN_TASK_REGISTRY->task_states_.end();
+          HELOG(kWarning, "(node {}) Could not find the task state: {}",
+                HRUN_CLIENT->node_id_, task->task_state_);
+          off += 1;
+          // PrintQueues();
+          // entry->complete_ = true;
+          // EndTask(lane, exec, task, off);
+          continue;
+        }
+        // Get task properties
+        bool is_remote = task->domain_id_.IsRemote(HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
+        // #define HERMES_REMOTE_DEBUG
 #ifdef HERMES_REMOTE_DEBUG
-      if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
-          !task->task_flags_.Any(TASK_REMOTE_DEBUG_MARK) &&
-          task->method_ != TaskMethod::kConstruct &&
-          HRUN_RUNTIME->remote_created_) {
-        is_remote = true;
-      }
+        if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
+            !task->task_flags_.Any(TASK_REMOTE_DEBUG_MARK) &&
+            task->method_ != TaskMethod::kConstruct &&
+            HRUN_RUNTIME->remote_created_) {
+          is_remote = true;
+        }
 #endif
-      bool group_avail = CheckTaskGroup(task, exec, work_entry.lane_id_, task->task_node_, is_remote);
-      bool should_run = task->ShouldRun(work_entry.cur_time_, flushing);
-      // Verify tasks
-      if (flushing && !task->IsFlush()) {
-        if (task->IsLongRunning()) {
-          exec->Monitor(MonitorMode::kFlushStat, task, rctx);
-        } else {
-          flush_.count_ += 1;
+        bool group_avail = CheckTaskGroup(task, exec, work_entry.lane_id_, task->task_node_, is_remote);
+        bool should_run = task->ShouldRun(work_entry.cur_time_, flushing);
+        // Verify tasks
+        if (flushing && !task->IsFlush()) {
+          if (task->IsLongRunning()) {
+            exec->Monitor(MonitorMode::kFlushStat, task, rctx);
+          } else {
+            flush_.count_ += 1;
+          }
         }
-      }
-      // Attempt to run the task if it's ready and runnable
-      if (!task->IsRunDisabled() && group_avail && should_run) {
-        // Execute or schedule task
-        if (is_remote) {
-          auto ids = HRUN_RUNTIME->ResolveDomainId(task->domain_id_);
-          HRUN_REMOTE_QUEUE->Disperse(task, exec, ids);
-          task->SetDisableRun();
-        } else if (task->IsLaneAll()) {
-          HRUN_REMOTE_QUEUE->DisperseLocal(task, exec, work_entry.queue_, work_entry.group_);
-          task->SetDisableRun();
-        } else if (task->IsCoroutine()) {
-          if (!task->IsStarted()) {
-            rctx.stack_ptr_ = AllocateStack();
-            if (rctx.stack_ptr_ == nullptr) {
-              HELOG(kFatal, "The stack pointer of size {} is NULL",
-                    stack_size_, rctx.stack_ptr_);
+        // Attempt to run the task if it's ready and runnable
+        if (!task->IsRunDisabled() && group_avail && should_run) {
+          // Execute or schedule task
+          if (is_remote) {
+            auto ids = HRUN_RUNTIME->ResolveDomainId(task->domain_id_);
+            HRUN_REMOTE_QUEUE->Disperse(task, exec, ids);
+            task->SetDisableRun();
+          } else if (task->IsLaneAll()) {
+            HRUN_REMOTE_QUEUE->DisperseLocal(task, exec, work_entry.queue_, work_entry.group_);
+            task->SetDisableRun();
+          } else if (task->IsCoroutine()) {
+            if (!task->IsStarted()) {
+              rctx.stack_ptr_ = AllocateStack();
+              if (rctx.stack_ptr_ == nullptr) {
+                HELOG(kFatal, "The stack pointer of size {} is NULL",
+                      stack_size_, rctx.stack_ptr_);
+              }
+              rctx.jmp_.fctx = bctx::make_fcontext(
+                  (char *) rctx.stack_ptr_ + stack_size_,
+                  stack_size_, &Worker::RunCoroutine);
+              task->SetStarted();
             }
-            rctx.jmp_.fctx = bctx::make_fcontext(
-                (char*)rctx.stack_ptr_ + stack_size_,
-                stack_size_, &Worker::RunCoroutine);
+            rctx.jmp_ = bctx::jump_fcontext(rctx.jmp_.fctx, task);
+            if (!task->IsStarted()) {
+              rctx.jmp_.fctx = bctx::make_fcontext(
+                  (char *) rctx.stack_ptr_ + stack_size_,
+                  stack_size_, &Worker::RunCoroutine);
+              task->SetStarted();
+            }
+          } else {
+            exec->Run(task->method_, task, rctx);
             task->SetStarted();
           }
-          rctx.jmp_ = bctx::jump_fcontext(rctx.jmp_.fctx, task);
-          if (!task->IsStarted()) {
-            rctx.jmp_.fctx = bctx::make_fcontext(
-                (char*)rctx.stack_ptr_ + stack_size_,
-                stack_size_, &Worker::RunCoroutine);
-            task->SetStarted();
+          task->DidRun(work_entry.cur_time_);
+        }
+        // Cleanup on task completion
+        if (task->IsModuleComplete()) {
+          entry->complete_ = true;
+          if (task->IsCoroutine() && !is_remote && !task->IsLaneAll()) {
+            FreeStack(rctx.stack_ptr_);
           }
+          RemoveTaskGroup(task, exec, work_entry.lane_id_, is_remote);
+          EndTask(lane, exec, task, off);
         } else {
-          exec->Run(task->method_, task, rctx);
-          task->SetStarted();
+          off += 1;
         }
-        task->DidRun(work_entry.cur_time_);
-      }
-      // Cleanup on task completion
-      if (task->IsModuleComplete()) {
-        entry->complete_ = true;
-        if (task->IsCoroutine() && !is_remote && !task->IsLaneAll()) {
-          FreeStack(rctx.stack_ptr_);
-        }
-        RemoveTaskGroup(task, exec, work_entry.lane_id_, is_remote);
-        EndTask(lane, exec, task, off);
-      } else {
-        off += 1;
       }
     }
   }
@@ -583,28 +589,30 @@ class Worker {
   void PrintQueues(bool no_long_run = false) {
     for (std::unique_ptr<Worker> &worker : HRUN_WORK_ORCHESTRATOR->workers_) {
       for (WorkEntry &work_entry : worker->work_queue_) {
-        Lane *&lane = work_entry.lane_;
-        LaneData *entry;
-        int off = 0;
-        while (!lane->peek(entry, off).IsNull()) {
-          Task *task = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
-          TaskState *exec = HRUN_TASK_REGISTRY->GetTaskState(task->task_state_);
-          bool is_remote = task->domain_id_.IsRemote(HRUN_RPC->GetNumHosts(),
-                                                     HRUN_CLIENT->node_id_);
-          if (no_long_run && task->IsLongRunning()) {
+        for (u32 i = 0; i < work_entry.lanes_.size(); ++i) {
+          Lane *&lane = work_entry.lanes_[i];
+          LaneData *entry;
+          int off = 0;
+          while (!lane->peek(entry, off).IsNull()) {
+            Task *task = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
+            TaskState *exec = HRUN_TASK_REGISTRY->GetTaskState(task->task_state_);
+            bool is_remote = task->domain_id_.IsRemote(HRUN_RPC->GetNumHosts(),
+                                                       HRUN_CLIENT->node_id_);
+            if (no_long_run && task->IsLongRunning()) {
+              off += 1;
+              continue;
+            }
+            HILOG(kInfo,
+                  "(node {}, worker {}) Task {} state {}, method {}, is remote: {}, long_running: {}",
+                  HRUN_CLIENT->node_id_,
+                  worker->id_,
+                  task->task_node_,
+                  exec->name_,
+                  task->method_,
+                  is_remote,
+                  task->IsLongRunning());
             off += 1;
-            continue;
           }
-          HILOG(kInfo,
-                "(node {}, worker {}) Task {} state {}, method {}, is remote: {}, long_running: {}",
-                HRUN_CLIENT->node_id_,
-                worker->id_,
-                task->task_node_,
-                exec->name_,
-                task->method_,
-                is_remote,
-                task->IsLongRunning());
-          off += 1;
         }
       }
     }

@@ -48,8 +48,9 @@ class Server : public TaskLib {
           task->is_fire_forget_ = true;
         }
         MultiQueue *real_queue = HRUN_CLIENT->GetQueue(QueueId(ptr->task_state_));
-        bool ret = real_queue->EmplaceFrac(
-            ptr->prio_, ptr->lane_hash_, task->sub_run_.shm_);
+        bool ret = real_queue->Emplace(
+            ptr->prio_, ptr->lane_hash_,
+            ptr->task_node_.node_depth_, task->sub_run_.shm_);
         if (ret) {
           task->phase_ = PushTaskPhase::kWaitSchedule;
         }

@@ -52,6 +52,7 @@ class Server : public TaskLib {
    * Set the Blob MDM
    * */
   void SetBlobMdm(SetBlobMdmTask *task, RunContext &rctx) {
+    HILOG(kDebug, "Setting BLOB MDM in the bucket");
     blob_mdm_.Init(task->blob_mdm_, HRUN_ADMIN->queue_id_);
     stager_mdm_.Init(task->stager_mdm_, HRUN_ADMIN->queue_id_);
     task->SetModuleComplete();

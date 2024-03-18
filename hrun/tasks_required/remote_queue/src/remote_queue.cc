@@ -399,7 +399,8 @@ class Server : public TaskLib {
 
     // Execute task
     MultiQueue *queue = HRUN_CLIENT->GetQueue(QueueId(state_id));
-    queue->Emplace(orig_task->prio_, orig_task->lane_hash_, task_ptr.shm_);
+    queue->Emplace(orig_task->prio_, orig_task->lane_hash_,
+                   orig_task->task_node_.node_depth_, task_ptr.shm_);
     HILOG(kDebug,
           "(node {}) Executing task (task_node={}, task_state={}/{}, state_name={}, method={}, size={}, lane_hash={})",
           HRUN_CLIENT->node_id_,
