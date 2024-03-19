@@ -42,13 +42,26 @@ class Server : public TaskLib {
     if (task->depth_ > 0) {
       LPointer<MdTask> depth_task =
           client_.AsyncMd(task->task_node_ + 1, task->domain_id_,
-                          task->depth_ - 1);
+                          task->depth_ - 1, 0);
       depth_task->Wait<TASK_YIELD_CO>(task);
+      HRUN_CLIENT->DelTask(depth_task);
     }
     task->ret_[0] = 1;
     task->SetModuleComplete();
   }
   void MonitorMd(u32 mode, MdTask *task, RunContext &rctx) {
+    switch (mode) {
+      case MonitorMode::kBeginTrainTime: {
+//        rctx.timer_.Now();
+//        rctx.timer_.Resume();
+        break;
+      }
+      case MonitorMode::kEndTrainTime: {
+        // rctx.timer_.Pause();
+        // HILOG(kInfo, "Md latency: {} usec", rctx.timer_.GetUsec());
+        break;
+      }
+    }
   }
 
   /** An I/O task */

@@ -27,7 +27,11 @@ static inline pid_t GetLinuxTid() {
   return syscall(SYS_gettid);
 }
 
-#define DEBUG
+#define HSHM_WORKER_IS_REMOTE BIT_OPT(u32, 0)
+#define HSHM_WORKER_GROUP_AVAIL BIT_OPT(u32, 1)
+#define HSHM_WORKER_SHOULD_RUN BIT_OPT(u32, 2)
+#define HSHM_WORKER_IS_FLUSHING BIT_OPT(u32, 3)
+#define HSHM_WORKER_LONG_RUNNING BIT_OPT(u32, 4)
 
 namespace hrun {
 
@@ -162,6 +166,8 @@ class Worker {
   bitfield32_t flags_;  /**< Worker metadata flags */
   std::unordered_map<hshm::charbuf, TaskNode>
       group_map_;        /**< Determine if a task can be executed right now */
+  std::unordered_map<TaskStateId, TaskState*>
+      state_map_;       /**< The set of task states */
   hshm::charbuf group_;  /**< The current group */
   WorkPending flush_;    /**< Info needed for flushing ops */
   hshm::Timepoint now_;  /**< The current timepoint */
@@ -363,17 +369,20 @@ class Worker {
     if (relinquish_queues_.size() > 0) {
       _RelinquishQueues();
     }
-    if (!IsContinuousPolling()) {
-      now_.Now();
-      for (WorkEntry &work_entry : work_queue_) {
-        work_entry.cur_time_ = now_;
-        PollGrouped(work_entry, flushing);
-      }
-    } else {
-      for (WorkEntry &work_entry : work_queue_) {
-        PollGrouped(work_entry, flushing);
-      }
+    for (WorkEntry &work_entry : work_queue_) {
+      PollGrouped(work_entry, flushing);
     }
+//    if (!IsContinuousPolling()) {
+//      now_.Now();
+//      for (WorkEntry &work_entry : work_queue_) {
+//        work_entry.cur_time_ = now_;
+//        PollGrouped(work_entry, flushing);
+//      }
+//    } else {
+//      for (WorkEntry &work_entry : work_queue_) {
+//        PollGrouped(work_entry, flushing);
+//      }
+//    }
   }
 
   /** Run an iteration over a particular queue */
@@ -382,6 +391,21 @@ class Worker {
     for (int depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1; depth >= 0; --depth) {
       PollLane(work_entry, depth, flushing);
     }
+  }
+
+  /** Get task state */
+  HSHM_ALWAYS_INLINE
+  TaskState* GetTaskState(const TaskStateId &state_id) {
+    auto it = state_map_.find(state_id);
+    if (it == state_map_.end()) {
+      TaskState *state = HRUN_TASK_REGISTRY->GetTaskState(state_id);
+      if (state == nullptr) {
+        return nullptr;
+      }
+      state_map_.emplace(state_id, state);
+      return state_map_[state_id];
+    }
+    return it->second;
   }
 
   /** Run a task */
@@ -401,15 +425,9 @@ class Worker {
         continue;
       }
       task = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
-      RunContext &rctx = task->ctx_;
-      rctx.lane_id_ = work_entry.lane_id_;
-      rctx.flush_ = &flush_;
       // Get the task state
-      TaskState *exec = HRUN_TASK_REGISTRY->GetTaskState(task->task_state_);
-      rctx.exec_ = exec;
+      TaskState *exec = GetTaskState(task->task_state_);
       if (!exec) {
-        bool was_end = HRUN_TASK_REGISTRY->task_states_.find(task->task_state_) ==
-            HRUN_TASK_REGISTRY->task_states_.end();
         HELOG(kWarning, "(node {}) Could not find the task state: {}",
               HRUN_CLIENT->node_id_, task->task_state_);
         off += 1;
@@ -418,83 +436,169 @@ class Worker {
         // EndTask(lane, exec, task, off);
         continue;
       }
+      // Pack runtime context
+      RunContext &rctx = task->ctx_;
+      rctx.lane_id_ = work_entry.lane_id_;
+      rctx.flush_ = &flush_;
+      rctx.exec_ = exec;
       // Get task properties
-      bool is_remote = task->domain_id_.IsRemote(HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
-      // #define HERMES_REMOTE_DEBUG
+      bitfield32_t props =
+          GetTaskProperties(task, exec, work_entry, flushing);
+      // Execute the task based on its properties
+      ExecTask(work_entry, task, rctx,
+               exec, props);
+      // Cleanup on task completion
+      CleanupTask(lane, entry, work_entry, off,
+                  task, rctx, exec, props);
+      did_work = true;
+    }
+    return did_work;
+  }
+
+  /** Get the characteristics of a task */
+  HSHM_ALWAYS_INLINE
+  bitfield32_t GetTaskProperties(Task *&task,
+                                 TaskState *&exec,
+                                 WorkEntry &work_entry,
+                                 bool flushing) {
+    bitfield32_t props;
+    bool is_remote = task->domain_id_.IsRemote(
+        HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
 #ifdef HERMES_REMOTE_DEBUG
-      if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
+    if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
             !task->task_flags_.Any(TASK_REMOTE_DEBUG_MARK) &&
             task->method_ != TaskMethod::kConstruct &&
             HRUN_RUNTIME->remote_created_) {
           is_remote = true;
         }
 #endif
-      bool group_avail = CheckTaskGroup(task, exec, work_entry.lane_id_, task->task_node_, is_remote);
-      bool should_run = task->ShouldRun(work_entry.cur_time_, flushing);
-      // Verify tasks
-      if (flushing && !task->IsFlush()) {
-        if (task->IsLongRunning()) {
-          exec->Monitor(MonitorMode::kFlushStat, task, rctx);
-        } else {
-          flush_.count_ += 1;
-        }
-      }
-      // Attempt to run the task if it's ready and runnable
-      if (!task->IsRunDisabled() && group_avail && should_run) {
-        // Execute or schedule task
-        if (is_remote) {
-          auto ids = HRUN_RUNTIME->ResolveDomainId(
-              task->domain_id_);
-          HRUN_REMOTE_QUEUE->Disperse(task, exec, ids);
-          task->SetDisableRun();
-        } else if (task->IsLaneAll()) {
-          HRUN_REMOTE_QUEUE->DisperseLocal(task, exec,
-                                           work_entry.queue_,
-                                           work_entry.group_);
-          task->SetDisableRun();
-        } else if (task->IsCoroutine()) {
-          if (!task->IsStarted()) {
-            rctx.stack_ptr_ = AllocateStack();
-            if (rctx.stack_ptr_ == nullptr) {
-              HELOG(kFatal, "The stack pointer of size {} is NULL",
-                    stack_size_, rctx.stack_ptr_);
-            }
-            rctx.jmp_.fctx = bctx::make_fcontext(
-                (char *) rctx.stack_ptr_ + stack_size_,
-                stack_size_, &Worker::RunCoroutine);
-            task->SetStarted();
-          }
-          rctx.jmp_ = bctx::jump_fcontext(rctx.jmp_.fctx, task);
-          if (!task->IsStarted()) {
-            rctx.jmp_.fctx = bctx::make_fcontext(
-                (char *) rctx.stack_ptr_ + stack_size_,
-                stack_size_, &Worker::RunCoroutine);
-            task->SetStarted();
-          }
-        } else {
-          exec->Run(task->method_, task, rctx);
-          task->SetStarted();
-        }
-        task->DidRun(work_entry.cur_time_);
-      }
-      // Cleanup on task completion
-      if (task->IsModuleComplete()) {
-        entry->complete_ = true;
-        if (task->IsCoroutine() && !is_remote && !task->IsLaneAll()) {
-          FreeStack(rctx.stack_ptr_);
-        }
-        RemoveTaskGroup(task, exec, work_entry.lane_id_, is_remote);
-        EndTask(lane, exec, task, off);
-      } else {
-        off += 1;
-      }
-      did_work = true;
+    bool group_avail = CheckTaskGroup(task, exec,
+                                      work_entry.lane_id_,
+                                      task->task_node_,
+                                      is_remote);
+    bool should_run = task->ShouldRun(work_entry.cur_time_, flushing);
+    if (is_remote) {
+      props.SetBits(HSHM_WORKER_IS_REMOTE);
     }
-    return did_work;
+    if (group_avail) {
+      props.SetBits(HSHM_WORKER_GROUP_AVAIL);
+    }
+    if (should_run) {
+      props.SetBits(HSHM_WORKER_SHOULD_RUN);
+    }
+    if (flushing) {
+      props.SetBits(HSHM_WORKER_IS_FLUSHING);
+    }
+    if (task->IsLongRunning()) {
+      props.SetBits(HSHM_WORKER_LONG_RUNNING);
+    }
+    return props;
+  }
+  
+  /** Run an arbitrary task */
+  HSHM_ALWAYS_INLINE
+  void ExecTask(WorkEntry &work_entry,
+                Task *&task,
+                RunContext &rctx,
+                TaskState *&exec,
+                bitfield32_t &props) {
+    // Determine if a task should be executed
+    if (task->IsRunDisabled() ||
+        !props.All(HSHM_WORKER_GROUP_AVAIL | HSHM_WORKER_SHOULD_RUN)) {
+      return;
+    }
+    // Flush tasks
+    if (props.Any(HSHM_WORKER_IS_FLUSHING) && !task->IsFlush()) {
+      if (task->IsLongRunning()) {
+        exec->Monitor(MonitorMode::kFlushStat, task, rctx);
+      } else {
+        flush_.count_ += 1;
+      }
+    }
+    // Monitoring callback
+    if (!task->IsStarted()) {
+      exec->Monitor(MonitorMode::kBeginTrainTime, task, rctx);
+    }
+    // Attempt to run the task if it's ready and runnable
+    if (props.Any(HSHM_WORKER_IS_REMOTE)) {
+      auto ids = HRUN_RUNTIME->ResolveDomainId(
+          task->domain_id_);
+      HRUN_REMOTE_QUEUE->Disperse(task, exec, ids);
+      task->SetDisableRun();
+    } else if (task->IsLaneAll()) {
+      HRUN_REMOTE_QUEUE->DisperseLocal(task, exec,
+                                       work_entry.queue_,
+                                       work_entry.group_);
+      task->SetDisableRun();
+    } else if (task->IsCoroutine()) {
+      ExecCoroutine(task, rctx);
+    } else {
+      exec->Run(task->method_, task, rctx);
+      task->SetStarted();
+    }
+    task->DidRun(work_entry.cur_time_);
+    // Monitoring callback
+    if (task->IsModuleComplete()) {
+      exec->Monitor(MonitorMode::kEndTrainTime, task, rctx);
+    }
+  }
+
+  /** Run a task */
+  HSHM_ALWAYS_INLINE
+  void ExecCoroutine(Task *&task, RunContext &rctx) {
+    // If task isn't started, allocate stack pointer
+    if (!task->IsStarted()) {
+      rctx.stack_ptr_ = AllocateStack();
+      if (rctx.stack_ptr_ == nullptr) {
+        HELOG(kFatal, "The stack pointer of size {} is NULL",
+              stack_size_, rctx.stack_ptr_);
+      }
+      rctx.jmp_.fctx = bctx::make_fcontext(
+          (char *) rctx.stack_ptr_ + stack_size_,
+          stack_size_, &Worker::CoroutineEntry);
+      task->SetStarted();
+    }
+    // Jump to CoroutineEntry
+    rctx.jmp_ = bctx::jump_fcontext(rctx.jmp_.fctx, task);
+    // Rebuild stack pointer if coroutine is not done
+    if (!task->IsStarted()) {
+      rctx.jmp_.fctx = bctx::make_fcontext(
+          (char *) rctx.stack_ptr_ + stack_size_,
+          stack_size_, &Worker::CoroutineEntry);
+      task->SetStarted();
+    }
+  }
+
+  /** Remove tasks */
+  HSHM_ALWAYS_INLINE
+  void CleanupTask(
+      Lane *lane,
+      LaneData *&entry,
+      WorkEntry &work_entry,
+      int &off,
+      Task *&task,
+      RunContext &rctx,
+      TaskState *&exec,
+      bitfield32_t &props) {
+    // Cleanup on task completion
+    if (task->IsModuleComplete()) {
+      entry->complete_ = true;
+      if (task->IsCoroutine() &&
+          !props.Any(HSHM_WORKER_IS_REMOTE) &&
+          !task->IsLaneAll()) {
+        FreeStack(rctx.stack_ptr_);
+      }
+      RemoveTaskGroup(task, exec,
+                      work_entry.lane_id_,
+                      props.Any(HSHM_WORKER_IS_REMOTE));
+      EndTask(lane, exec, task, off);
+    } else {
+      off += 1;
+    }
   }
 
   /** Run a coroutine */
-  static void RunCoroutine(bctx::transfer_t t) {
+  static void CoroutineEntry(bctx::transfer_t t) {
     Task *task = reinterpret_cast<Task*>(t.data);
     RunContext &rctx = task->ctx_;
     TaskState *&exec = rctx.exec_;

@@ -326,13 +326,17 @@ class Server : public TaskLib {
     }
   }
   void MonitorFlushData(u32 mode, FlushDataTask *task, RunContext &rctx) {
-    BLOB_MAP_T &blob_map = blob_map_[rctx.lane_id_];
-    for (auto &it : blob_map) {
-      BlobInfo &blob_info = it.second;
-      if (blob_info.last_flush_ > 0 &&
-          blob_info.mod_count_ > blob_info.last_flush_) {
-        rctx.flush_->count_ += 1;
-        return;
+    switch (mode) {
+      case hrun::MonitorMode::kFlushStat: {
+        BLOB_MAP_T &blob_map = blob_map_[rctx.lane_id_];
+        for (auto &it : blob_map) {
+          BlobInfo &blob_info = it.second;
+          if (blob_info.last_flush_ > 0 &&
+              blob_info.mod_count_ > blob_info.last_flush_) {
+            rctx.flush_->count_ += 1;
+            return;
+          }
+        }
       }
     }
   }

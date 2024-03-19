@@ -7,4 +7,4 @@ pkgs:
     sleep: 5
   - pkg_type: hermes_unit_tests
     pkg_name: hermes_unit_tests
-    TEST_CASE: TestIpc
+    TEST_CASE: TestAsyncIpc

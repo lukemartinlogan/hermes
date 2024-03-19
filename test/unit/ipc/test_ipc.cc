@@ -40,13 +40,43 @@ TEST_CASE("TestIpc") {
     int ret;
     // HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
-    ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 4);
+    ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 0, 0);
     REQUIRE(ret == 1);
   }
   t.Pause();
 
   HILOG(kInfo, "Latency: {} MOps", ops / t.GetUsec());
 }
+
+TEST_CASE("TestAsyncIpc") {
+  int rank, nprocs;
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+  hrun::small_message::Client client;
+  HRUN_ADMIN->RegisterTaskLibRoot(hrun::DomainId::GetGlobal(), "small_message");
+  client.CreateRoot(hrun::DomainId::GetGlobal(), "ipc_test");
+  MPI_Barrier(MPI_COMM_WORLD);
+  hshm::Timer t;
+
+  int pid = getpid();
+  ProcessAffiner::SetCpuAffinity(pid, 8);
+
+  t.Resume();
+  size_t ops = (1 << 15);
+  for (size_t i = 0; i < ops; ++i) {
+    int ret;
+    // HILOG(kInfo, "Sending message {}", i);
+    int node_id = 1 + ((rank + 1) % nprocs);
+    client.AsyncMdRoot(hrun::DomainId::GetNode(node_id),
+                       0, TASK_FIRE_AND_FORGET);
+  }
+//  HRUN_ADMIN->FlushRoot(DomainId::GetLocal());
+  t.Pause();
+
+  HILOG(kInfo, "Latency: {} MOps", ops / t.GetUsec());
+}
+
 
 TEST_CASE("TestFlush") {
   int rank, nprocs;
@@ -69,7 +99,7 @@ TEST_CASE("TestFlush") {
     HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
     LPointer<hrunpq::TypedPushTask<hrun::small_message::MdTask>> task =
-        client.AsyncMdRoot(hrun::DomainId::GetNode(node_id), 0);
+        client.AsyncMdRoot(hrun::DomainId::GetNode(node_id), 0, 0);
   }
   HRUN_ADMIN->FlushRoot(DomainId::GetGlobal());
   t.Pause();
@@ -84,16 +114,23 @@ void TestIpcMultithread(int nprocs) {
 
 #pragma omp parallel shared(client, nprocs) num_threads(nprocs)
   {
+    hshm::Timer t;
+    t.Resume();
     int rank = omp_get_thread_num();
-    size_t ops = 256;
+    size_t ops = (1 << 20);
     for (size_t i = 0; i < ops; ++i) {
       int ret;
-      HILOG(kInfo, "Sending message {}", i);
       int node_id = 1 + ((rank + 1) % nprocs);
-      ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 0);
+      ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 0, 0);
       REQUIRE(ret == 1);
     }
+#pragma omp barrier
+    t.Pause();
+    if (rank == 0) {
+      HILOG(kInfo, "Latency: {} MOps", ops * nprocs / t.GetUsec());
+    }
   }
+
 }
 
 TEST_CASE("TestIpcMultithread4") {

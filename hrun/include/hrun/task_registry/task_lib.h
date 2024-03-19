@@ -26,9 +26,10 @@ typedef LPointer<Task> TaskPointer;
 /** Monitoring modes */
 class MonitorMode {
  public:
-  TASK_METHOD_T kEstTime = 0;
-  TASK_METHOD_T kTrainTime = 1;
-  TASK_METHOD_T kFlushStat = 2;
+  TASK_METHOD_T kBeginTrainTime = 0;
+  TASK_METHOD_T kEndTrainTime = 1;
+  TASK_METHOD_T kEstTime = 2;
+  TASK_METHOD_T kFlushStat = 3;
 };
 
 /**

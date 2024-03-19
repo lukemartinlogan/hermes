@@ -257,6 +257,7 @@ struct RunContext {
   void *stack_ptr_;   /**< The pointer to the stack (runtime) */
   TaskLib *exec_;
   WorkPending *flush_;
+  hshm::Timer timer_;
 
   /** Default constructor */
   RunContext() {}

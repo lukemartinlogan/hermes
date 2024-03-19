@@ -8,7 +8,7 @@
 #include "hrun/queue_manager/queue.h"
 #include "mpsc_queue.h"
 
-#define HSHM_MAX_QUEUE_GROUP_DEPTH 5
+#define HSHM_MAX_QUEUE_GROUP_DEPTH 1
 
 namespace hrun {
 
@@ -257,7 +257,7 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
     }
     LaneGroup &lane_group = GetGroup(prio);
     u32 lane_id = lane_hash % lane_group.num_lanes_;
-    if (depth > HSHM_MAX_QUEUE_GROUP_DEPTH) {
+    if (depth >= HSHM_MAX_QUEUE_GROUP_DEPTH) {
       depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1;
     }
     Lane &lane = GetLane(lane_group, lane_id, depth);

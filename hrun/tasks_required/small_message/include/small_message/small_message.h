@@ -41,13 +41,13 @@ class Client : public TaskLibClient {
   void AsyncMdConstruct(MdTask *task,
                         const TaskNode &task_node,
                         const DomainId &domain_id,
-                        u32 depth) {
+                        u32 depth, u32 flags) {
     HRUN_CLIENT->ConstructTask<MdTask>(
-        task, task_node, domain_id, id_, depth);
+        task, task_node, domain_id, id_, depth, flags);
   }
-  int MdRoot(const DomainId &domain_id, u32 depth) {
+  int MdRoot(const DomainId &domain_id, u32 depth, u32 flags) {
     LPointer<hrunpq::TypedPushTask<MdTask>> push_task =
-        AsyncMdRoot(domain_id, depth);
+        AsyncMdRoot(domain_id, depth, flags);
     push_task->Wait();
     MdTask *task = push_task->get();
     int ret = task->ret_[0];
