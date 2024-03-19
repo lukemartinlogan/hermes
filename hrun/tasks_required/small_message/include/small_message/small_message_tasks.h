@@ -58,6 +58,7 @@ struct DestructTask : public DestroyTaskStateTask {
  * A custom task in small_message
  * */
 struct MdTask : public Task, TaskFlags<TF_SRL_SYM | TF_REPLICA> {
+  IN u32 depth_;
   OUT hipc::pod_array<int, 1> ret_;
 
   /** SHM default constructor */
@@ -69,17 +70,19 @@ struct MdTask : public Task, TaskFlags<TF_SRL_SYM | TF_REPLICA> {
   MdTask(hipc::Allocator *alloc,
          const TaskNode &task_node,
          const DomainId &domain_id,
-         TaskStateId &state_id) : Task(alloc) {
+         TaskStateId &state_id,
+         u32 depth) : Task(alloc) {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
     prio_ = TaskPrio::kLowLatency;
     task_state_ = state_id;
     method_ = Method::kMd;
-    task_flags_.SetBits(TASK_LOW_LATENCY);
+    task_flags_.SetBits(TASK_LOW_LATENCY | TASK_COROUTINE);
     domain_id_ = domain_id;
 
     // Custom params
+    depth_ = depth;
     ret_.construct(alloc, 1);
   }
 
@@ -90,71 +93,6 @@ struct MdTask : public Task, TaskFlags<TF_SRL_SYM | TF_REPLICA> {
 
   /** Process duplicate message output */
   void DupEnd(u32 replica, MdTask &dup_task) {
-  }
-
-  /** Begin replication */
-  void ReplicateStart(u32 count) {
-    ret_.resize(count);
-  }
-
-  /** Finalize replication */
-  void ReplicateEnd() {}
-
-  /** (De)serialize message call */
-  template<typename Ar>
-  void SerializeStart(Ar &ar) {
-    task_serialize<Ar>(ar);
-  }
-
-  /** (De)serialize message return */
-  template<typename Ar>
-  void SerializeEnd(u32 replica, Ar &ar) {
-    ar(ret_[replica]);
-  }
-
-  /** Create group */
-  HSHM_ALWAYS_INLINE
-  u32 GetGroup(hshm::charbuf &group) {
-    return TASK_UNORDERED;
-  }
-};
-
-/**
- * A custom task in small_message
- * */
-struct MdPushTask : public Task, TaskFlags<TF_SRL_SYM | TF_REPLICA> {
-  OUT hipc::pod_array<int, 1> ret_;
-
-  /** SHM default constructor */
-  HSHM_ALWAYS_INLINE explicit
-  MdPushTask(hipc::Allocator *alloc) : Task(alloc) {}
-
-  /** Emplace constructor */
-  HSHM_ALWAYS_INLINE explicit
-  MdPushTask(hipc::Allocator *alloc,
-             const TaskNode &task_node,
-             const DomainId &domain_id,
-             TaskStateId &state_id) : Task(alloc) {
-    // Initialize task
-    task_node_ = task_node;
-    lane_hash_ = 0;
-    prio_ = TaskPrio::kLowLatency;
-    task_state_ = state_id;
-    method_ = Method::kMd;
-    task_flags_.SetBits(TASK_LOW_LATENCY);
-    domain_id_ = domain_id;
-
-    // Custom params
-    ret_.construct(alloc, 1);
-  }
-
-  /** Duplicate message */
-  void Dup(hipc::Allocator *alloc, MdPushTask &other) {
-    task_dup(other);
-  }
-
-  /** Process duplicate message output */
-  void DupEnd(u32 replica, MdPushTask &dup_task) {
   }
 
   /** Begin replication */

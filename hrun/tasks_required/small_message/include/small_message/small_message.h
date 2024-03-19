@@ -38,40 +38,23 @@ class Client : public TaskLibClient {
   }
 
   /** Metadata task */
-  LPointer<MdTask> AsyncMd(const TaskNode &task_node,
-                           const DomainId &domain_id) {
-    MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);
-    auto task = HRUN_CLIENT->NewTask<MdTask>(
-        task_node, domain_id, id_);
-    queue->Emplace(TaskPrio::kLowLatency, 3, 0, task.shm_);
-    return task;
+  void AsyncMdConstruct(MdTask *task,
+                        const TaskNode &task_node,
+                        const DomainId &domain_id,
+                        u32 depth) {
+    HRUN_CLIENT->ConstructTask<MdTask>(
+        task, task_node, domain_id, id_, depth);
   }
-  HRUN_TASK_NODE_ROOT(AsyncMd);
-  int MdRoot(const DomainId &domain_id) {
-    LPointer<MdTask> task = AsyncMdRoot(domain_id);
-    task->Wait();
+  int MdRoot(const DomainId &domain_id, u32 depth) {
+    LPointer<hrunpq::TypedPushTask<MdTask>> push_task =
+        AsyncMdRoot(domain_id, depth);
+    push_task->Wait();
+    MdTask *task = push_task->get();
     int ret = task->ret_[0];
     HRUN_CLIENT->DelTask(task);
     return ret;
   }
-
-  /** Metadata PUSH task */
-  void AsyncMdPushConstruct(MdPushTask *task,
-                            const TaskNode &task_node,
-                            const DomainId &domain_id) {
-    HRUN_CLIENT->ConstructTask<MdPushTask>(
-        task, task_node, domain_id, id_);
-  }
-  int MdPushRoot(const DomainId &domain_id) {
-    LPointer<hrunpq::TypedPushTask<MdPushTask>> push_task =
-        AsyncMdPushRoot(domain_id);
-    push_task->Wait();
-    MdPushTask *task = push_task->get();
-    int ret = task->ret_[0];
-    HRUN_CLIENT->DelTask(push_task);
-    return ret;
-  }
-  HRUN_TASK_NODE_PUSH_ROOT(MdPush);
+  HRUN_TASK_NODE_PUSH_ROOT(Md);
 
   /** Io task */
   void AsyncIoConstruct(IoTask *task, const TaskNode &task_node,

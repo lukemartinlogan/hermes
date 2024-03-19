@@ -19,10 +19,12 @@ namespace hrun::small_message {
 class Server : public TaskLib {
  public:
   int count_ = 0;
+  Client client_;
 
  public:
   /** Construct small_message */
   void Construct(ConstructTask *task, RunContext &rctx) {
+    client_.Init(id_, HRUN_ADMIN->queue_id_);
     task->SetModuleComplete();
   }
   void MonitorConstruct(u32 mode, ConstructTask *task, RunContext &rctx) {
@@ -37,18 +39,16 @@ class Server : public TaskLib {
 
   /** A metadata operation */
   void Md(MdTask *task, RunContext &rctx) {
+    if (task->depth_ > 0) {
+      LPointer<MdTask> depth_task =
+          client_.AsyncMd(task->task_node_ + 1, task->domain_id_,
+                          task->depth_ - 1);
+      depth_task->Wait<TASK_YIELD_CO>(task);
+    }
     task->ret_[0] = 1;
     task->SetModuleComplete();
   }
   void MonitorMd(u32 mode, MdTask *task, RunContext &rctx) {
-  }
-
-  /** A metadata operation + push task */
-  void MdPush(MdPushTask *task, RunContext &rctx) {
-    task->ret_[0] = 1;
-    task->SetModuleComplete();
-  }
-  void MonitorMdPush(u32 mode, MdPushTask *task, RunContext &rctx) {
   }
 
   /** An I/O task */

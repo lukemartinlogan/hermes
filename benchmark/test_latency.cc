@@ -201,55 +201,6 @@ TEST_CASE("TestSpawnJoinArgoThread") {
   HILOG(kInfo, "Latency: {} MOps", count / t.GetUsec());
 }
 
-void TestWorkerIterationLatency(u32 num_queues, u32 num_lanes) {
-  HRUN_RUNTIME->Create();
-
-  hrun::Worker worker(0);
-  std::vector<hipc::uptr<hrun::MultiQueue>> queues;
-  for (u32 i = 0; i < num_queues; ++i) {
-    hrun::QueueId qid(0, i + 1);
-    std::vector<PriorityInfo> queue_info = {
-        {TaskPrio::kAdmin, num_lanes, num_lanes, 256, 0}
-    };
-    auto queue = hipc::make_uptr<hrun::MultiQueue>(
-        qid, queue_info);
-    queues.emplace_back(std::move(queue));
-    for (u32 j = 0; j < num_lanes; ++j) {
-      worker.PollQueues({{0, j, queue.get()}});
-    }
-  }
-
-  hrun::small_message::Client client;
-  HRUN_ADMIN->RegisterTaskLibRoot(hrun::DomainId::GetLocal(), "small_message");\
-  client.CreateRoot(hrun::DomainId::GetLocal(), "ipc_test");
-
-  hshm::Timer t;
-  t.Resume();
-  // size_t ops = (1 << 20);
-  size_t ops = 256;
-  for (size_t i = 0; i < ops; ++i) {
-    hipc::LPointer<hrun::small_message::MdPushTask> task;
-    hrun::TaskNode task_node(hrun::TaskId((u32)0, (u64)i));
-    task = client.AsyncMdPushEmplace(queues[num_queues - 1].get(),
-                                     task_node,
-                                     hrun::DomainId::GetLocal());
-    worker.Run(false);
-    HRUN_CLIENT->DelTask(task);
-  }
-  t.Pause();
-
-  HILOG(kInfo, "Latency: {} MOps", ops / t.GetUsec());
-}
-
-/** Time for worker to process a request */
-TEST_CASE("TestWorkerLatency") {
-  TRANSPARENT_HRUN();
-  TestWorkerIterationLatency(1, 16);
-  TestWorkerIterationLatency(5, 16);
-  TestWorkerIterationLatency(10, 16);
-  TestWorkerIterationLatency(15, 16);
-}
-
 /** Time to process a request */
 TEST_CASE("TestRoundTripLatency") {
   TRANSPARENT_HERMES();
@@ -270,8 +221,7 @@ TEST_CASE("TestRoundTripLatency") {
   size_t ops = (1 << 20);
   // size_t ops = 1024;
   for (size_t i = 0; i < ops; ++i) {
-    // client.MdRoot(hrun::DomainId::GetLocal());
-    client.MdPushRoot(hrun::DomainId::GetLocal());
+    client.MdRoot(hrun::DomainId::GetLocal(), 0);
   }
   t.Pause();
 

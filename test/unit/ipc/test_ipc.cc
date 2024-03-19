@@ -35,12 +35,12 @@ TEST_CASE("TestIpc") {
   ProcessAffiner::SetCpuAffinity(pid, 8);
 
   t.Resume();
-  size_t ops = 256;
+  size_t ops = (1 << 15);
   for (size_t i = 0; i < ops; ++i) {
     int ret;
-    HILOG(kInfo, "Sending message {}", i);
+    // HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
-    ret = client.MdRoot(hrun::DomainId::GetNode(node_id));
+    ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 4);
     REQUIRE(ret == 1);
   }
   t.Pause();
@@ -68,8 +68,8 @@ TEST_CASE("TestFlush") {
     int ret;
     HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
-    LPointer<hrun::small_message::MdTask> task =
-        client.AsyncMdRoot(hrun::DomainId::GetNode(node_id));
+    LPointer<hrunpq::TypedPushTask<hrun::small_message::MdTask>> task =
+        client.AsyncMdRoot(hrun::DomainId::GetNode(node_id), 0);
   }
   HRUN_ADMIN->FlushRoot(DomainId::GetGlobal());
   t.Pause();
@@ -90,7 +90,7 @@ void TestIpcMultithread(int nprocs) {
       int ret;
       HILOG(kInfo, "Sending message {}", i);
       int node_id = 1 + ((rank + 1) % nprocs);
-      ret = client.MdRoot(hrun::DomainId::GetNode(node_id));
+      ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 0);
       REQUIRE(ret == 1);
     }
   }

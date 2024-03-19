@@ -20,10 +20,6 @@ void Run(u32 method, Task *task, RunContext &rctx) override {
       Io(reinterpret_cast<IoTask *>(task), rctx);
       break;
     }
-    case Method::kMdPush: {
-      MdPush(reinterpret_cast<MdPushTask *>(task), rctx);
-      break;
-    }
   }
 }
 /** Execute a task */
@@ -43,10 +39,6 @@ void Monitor(u32 mode, Task *task, RunContext &rctx) override {
     }
     case Method::kIo: {
       MonitorIo(mode, reinterpret_cast<IoTask *>(task), rctx);
-      break;
-    }
-    case Method::kMdPush: {
-      MonitorMdPush(mode, reinterpret_cast<MdPushTask *>(task), rctx);
       break;
     }
   }
@@ -70,10 +62,6 @@ void Del(u32 method, Task *task) override {
       HRUN_CLIENT->DelTask<IoTask>(reinterpret_cast<IoTask *>(task));
       break;
     }
-    case Method::kMdPush: {
-      HRUN_CLIENT->DelTask<MdPushTask>(reinterpret_cast<MdPushTask *>(task));
-      break;
-    }
   }
 }
 /** Duplicate a task */
@@ -93,10 +81,6 @@ void Dup(u32 method, Task *orig_task, std::vector<LPointer<Task>> &dups) overrid
     }
     case Method::kIo: {
       hrun::CALL_DUPLICATE(reinterpret_cast<IoTask*>(orig_task), dups);
-      break;
-    }
-    case Method::kMdPush: {
-      hrun::CALL_DUPLICATE(reinterpret_cast<MdPushTask*>(orig_task), dups);
       break;
     }
   }
@@ -120,10 +104,6 @@ void DupEnd(u32 method, u32 replica, Task *orig_task, Task *dup_task) override {
       hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<IoTask*>(orig_task), reinterpret_cast<IoTask*>(dup_task));
       break;
     }
-    case Method::kMdPush: {
-      hrun::CALL_DUPLICATE_END(replica, reinterpret_cast<MdPushTask*>(orig_task), reinterpret_cast<MdPushTask*>(dup_task));
-      break;
-    }
   }
 }
 /** Ensure there is space to store replicated outputs */
@@ -143,10 +123,6 @@ void ReplicateStart(u32 method, u32 count, Task *task) override {
     }
     case Method::kIo: {
       hrun::CALL_REPLICA_START(count, reinterpret_cast<IoTask*>(task));
-      break;
-    }
-    case Method::kMdPush: {
-      hrun::CALL_REPLICA_START(count, reinterpret_cast<MdPushTask*>(task));
       break;
     }
   }
@@ -170,10 +146,6 @@ void ReplicateEnd(u32 method, Task *task) override {
       hrun::CALL_REPLICA_END(reinterpret_cast<IoTask*>(task));
       break;
     }
-    case Method::kMdPush: {
-      hrun::CALL_REPLICA_END(reinterpret_cast<MdPushTask*>(task));
-      break;
-    }
   }
 }
 /** Serialize a task when initially pushing into remote */
@@ -193,10 +165,6 @@ std::vector<DataTransfer> SaveStart(u32 method, BinaryOutputArchive<true> &ar, T
     }
     case Method::kIo: {
       ar << *reinterpret_cast<IoTask*>(task);
-      break;
-    }
-    case Method::kMdPush: {
-      ar << *reinterpret_cast<MdPushTask*>(task);
       break;
     }
   }
@@ -226,11 +194,6 @@ TaskPointer LoadStart(u32 method, BinaryInputArchive<true> &ar) override {
       ar >> *reinterpret_cast<IoTask*>(task_ptr.ptr_);
       break;
     }
-    case Method::kMdPush: {
-      task_ptr.ptr_ = HRUN_CLIENT->NewEmptyTask<MdPushTask>(task_ptr.shm_);
-      ar >> *reinterpret_cast<MdPushTask*>(task_ptr.ptr_);
-      break;
-    }
   }
   return task_ptr;
 }
@@ -251,10 +214,6 @@ std::vector<DataTransfer> SaveEnd(u32 method, BinaryOutputArchive<false> &ar, Ta
     }
     case Method::kIo: {
       ar << *reinterpret_cast<IoTask*>(task);
-      break;
-    }
-    case Method::kMdPush: {
-      ar << *reinterpret_cast<MdPushTask*>(task);
       break;
     }
   }
@@ -279,10 +238,6 @@ void LoadEnd(u32 replica, u32 method, BinaryInputArchive<false> &ar, Task *task)
       ar.Deserialize(replica, *reinterpret_cast<IoTask*>(task));
       break;
     }
-    case Method::kMdPush: {
-      ar.Deserialize(replica, *reinterpret_cast<MdPushTask*>(task));
-      break;
-    }
   }
 }
 /** Get the grouping of the task */
@@ -299,9 +254,6 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
     }
     case Method::kIo: {
       return reinterpret_cast<IoTask*>(task)->GetGroup(group);
-    }
-    case Method::kMdPush: {
-      return reinterpret_cast<MdPushTask*>(task)->GetGroup(group);
     }
   }
   return -1;
