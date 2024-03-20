@@ -35,7 +35,7 @@ TEST_CASE("TestIpc") {
   ProcessAffiner::SetCpuAffinity(pid, 8);
 
   t.Resume();
-  size_t ops = (1 << 12);
+  size_t ops = (1 << 20);
   for (size_t i = 0; i < ops; ++i) {
     int ret;
     // HILOG(kInfo, "Sending message {}", i);

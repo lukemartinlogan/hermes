@@ -277,7 +277,7 @@ struct Task : public hipc::ShmContainer {
   u32 lane_hash_;              /**< Determine the lane a task is keyed to */
   u32 method_;                 /**< The method to call in the state */
   bitfield32_t task_flags_;    /**< Properties of the task */
-  std::atomic<u32> atask_flags_ = 0;    /**< Properties of the task */
+  // std::atomic<u32> atask_flags_ = 0;    /**< Properties of the task */
   double period_ns_;           /**< The period of the task */
   hshm::Timepoint start_;      /**< The time the task started */
   RunContext ctx_;
@@ -291,22 +291,26 @@ struct Task : public hipc::ShmContainer {
 
   /** Set task as externally complete */
   HSHM_ALWAYS_INLINE void SetModuleComplete() {
-    atask_flags_ |= TASK_MODULE_COMPLETE;
+    // atask_flags_ |= TASK_MODULE_COMPLETE;
+    task_flags_.SetBits(TASK_MODULE_COMPLETE);
   }
 
   /** Check if a task marked complete externally */
   HSHM_ALWAYS_INLINE bool IsModuleComplete() {
-    return atask_flags_.load() & TASK_MODULE_COMPLETE;
+    // return atask_flags_.load() & TASK_MODULE_COMPLETE;
+    return task_flags_.Any(TASK_MODULE_COMPLETE);
   }
 
   /** Set task as complete */
   HSHM_ALWAYS_INLINE void SetComplete() {
-    atask_flags_ |= TASK_MODULE_COMPLETE | TASK_COMPLETE;
+    // atask_flags_ |= TASK_MODULE_COMPLETE | TASK_COMPLETE;
+    task_flags_.SetBits(TASK_MODULE_COMPLETE | TASK_COMPLETE);
   }
 
   /** Check if task is complete */
   HSHM_ALWAYS_INLINE bool IsComplete() {
-    return atask_flags_ & TASK_COMPLETE;
+    // return atask_flags_ & TASK_COMPLETE;
+    return task_flags_.Any(TASK_COMPLETE);
   }
 
   /** Check if a task is fire & forget */
@@ -470,9 +474,10 @@ struct Task : public hipc::ShmContainer {
   void Wait() {
     while (!IsComplete()) {
       if constexpr (THREAD_MODEL == TASK_YIELD_STD) {
-        for (int i = 0; i < 100000; ++i) {
+        for (;;) {
+          std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
           if (IsComplete()) {
-            std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
+            // std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
             return;
           }
         }
@@ -529,7 +534,7 @@ struct Task : public hipc::ShmContainer {
     method_ = method;
     domain_id_ = domain_id;
     task_flags_ = task_flags;
-    atask_flags_ = task_flags.bits_;
+    // atask_flags_ = task_flags.bits_;
   }
 
   /**====================================
@@ -576,7 +581,7 @@ struct Task : public hipc::ShmContainer {
   void task_serialize(Ar &ar) {
     // NOTE(llogan): don't serialize start_ because of clock drift
     ar(task_state_, task_node_, domain_id_, lane_hash_, prio_, method_,
-       task_flags_, atask_flags_, period_ns_);
+       task_flags_, period_ns_); // , atask_flags_);
   }
 
   template<typename TaskT>
@@ -588,7 +593,7 @@ struct Task : public hipc::ShmContainer {
     prio_ = other.prio_;
     method_ = other.method_;
     task_flags_ = other.task_flags_;
-    atask_flags_ = other.atask_flags_.load();
+    // atask_flags_ = other.atask_flags_.load();
     period_ns_ = other.period_ns_;
     start_ = other.start_;
   }

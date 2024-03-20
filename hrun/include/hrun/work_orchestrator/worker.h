@@ -202,14 +202,14 @@ class PrivateTaskQueue {
   }
 
   void erase(size_t off) {
-    queue_[off].task_.ptr_ = nullptr;
+    queue_[off % queue_.size()].task_.ptr_ = nullptr;
     --size_;
     _correct_head();
   }
 
   void _correct_head() {
     for (size_t i = head_; head_ < tail_; ++i) {
-      if (queue_[i].task_.ptr_ == nullptr) {
+      if (queue_[i % queue_.size()].task_.ptr_ == nullptr) {
         head_ = i;
       } else {
         break;
@@ -222,11 +222,13 @@ class PrivateTaskMultiQueue {
  public:
   std::vector<PrivateTaskQueue> low_lat_;
   std::vector<PrivateTaskQueue> high_lat_;
+  std::vector<PrivateTaskQueue> long_running_;
 
  public:
   void Init(int max_task_depth, size_t queue_depth) {
     low_lat_.resize(max_task_depth, queue_depth);
     high_lat_.resize(max_task_depth, queue_depth);
+    long_running_.resize(1, queue_depth);
   }
 
   PrivateTaskQueue& GetLowLatency(int task_depth) {
@@ -235,6 +237,10 @@ class PrivateTaskMultiQueue {
 
   PrivateTaskQueue& GetHighLatency(int task_depth) {
     return high_lat_[task_depth];
+  }
+
+  PrivateTaskQueue& GetLongRunning() {
+    return long_running_[0];
   }
 };
 
@@ -517,7 +523,7 @@ class Worker {
               RunTask(lane_info, task, lane_info.lane_id_, flushing);
           if (!task->IsModuleComplete()) {
             if (task->IsLongRunning()) {
-              long_running_.emplace_back(
+              pending_.GetLongRunning().push(
                   PrivateTaskQueueEntry{task, &lane_info});
             } else if (task->prio_ == TaskPrio::kLowLatency) {
               pending_.GetLowLatency(depth).push(
@@ -554,7 +560,7 @@ class Worker {
       PollPrivateQueue(queue, flushing);
     }
     // Poll long-running tasks
-    PollLongRunningQueue(flushing);
+    PollPrivateQueue(pending_.GetLongRunning(), flushing);
   }
 
   /** Poll the set of tasks in the private queue */
@@ -571,19 +577,6 @@ class Worker {
           EndTask(exec, entry.task_);
           queue.erase(i);
         }
-      }
-    }
-  }
-
-  /** Poll long-running queue */
-  void PollLongRunningQueue(bool flushing) {
-    for (PrivateTaskQueueEntry &entry : long_running_) {
-      TaskState *exec = RunTask(*entry.lane_info_,
-                                entry.task_,
-                                entry.lane_info_->lane_id_,
-                                flushing);
-      if (entry.task_->IsModuleComplete()) {
-        EndTask(exec, entry.task_);
       }
     }
   }
