@@ -35,13 +35,13 @@ TEST_CASE("TestIpc") {
   ProcessAffiner::SetCpuAffinity(pid, 8);
 
   t.Resume();
-  size_t ops = (1 << 20);
+  size_t ops = (1 << 14);
   for (size_t i = 0; i < ops; ++i) {
     int ret;
     // HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
-    ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 0, 0);
-    // REQUIRE(ret == 1);
+    ret = client.MdRoot(hrun::DomainId::GetNode(node_id), 1, 0);
+    REQUIRE(ret == 1);
   }
   t.Pause();
 

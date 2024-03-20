@@ -581,7 +581,7 @@ struct Task : public hipc::ShmContainer {
   void task_serialize(Ar &ar) {
     // NOTE(llogan): don't serialize start_ because of clock drift
     ar(task_state_, task_node_, domain_id_, lane_hash_, prio_, method_,
-       task_flags_, period_ns_); // , atask_flags_);
+       task_flags_, period_ns_);  // , atask_flags_);
   }
 
   template<typename TaskT>

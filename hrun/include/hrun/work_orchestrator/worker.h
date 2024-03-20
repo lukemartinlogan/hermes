@@ -23,6 +23,8 @@
 #include "affinity.h"
 #include "hrun/network/rpc_thallium.h"
 
+#define HSHM_WORKER_MAX_TASK_DEPTH HSHM_MAX_QUEUE_GROUP_DEPTH
+
 static inline pid_t GetLinuxTid() {
   return syscall(SYS_gettid);
 }
@@ -232,10 +234,16 @@ class PrivateTaskMultiQueue {
   }
 
   PrivateTaskQueue& GetLowLatency(int task_depth) {
+    if (task_depth >= low_lat_.size()) {
+      task_depth = low_lat_.size() - 1;
+    }
     return low_lat_[task_depth];
   }
 
   PrivateTaskQueue& GetHighLatency(int task_depth) {
+    if (task_depth >= high_lat_.size()) {
+      task_depth = high_lat_.size() - 1;
+    }
     return high_lat_[task_depth];
   }
 
@@ -302,7 +310,7 @@ class Worker {
     }
     // MAX_DEPTH * [LOW_LAT, LONG_LAT]
     config::QueueManagerInfo &qm = HRUN_QM_RUNTIME->config_->queue_manager_;
-    pending_.Init(HSHM_MAX_QUEUE_GROUP_DEPTH,
+    pending_.Init(HSHM_WORKER_MAX_TASK_DEPTH,
                   qm.queue_depth_);
     cur_time_.Now();
 
@@ -479,18 +487,23 @@ class Worker {
       _RelinquishQueues();
     }
     // Ingest tasks from the ingress queues
-    IngestLanes(flushing);
+    IngestLanes(0, flushing);
+    for (size_t i = 0; i < 10; ++i) {
+      if (!IngestLanes(1, flushing)) {
+        break;
+      }
+    }
     // Process tasks in the pending queues
     PollPending(flushing);
   }
 
   /** Ingest all lanes */
   HSHM_ALWAYS_INLINE
-  size_t IngestLanes(bool flushing) {
+  size_t IngestLanes(size_t min_depth, bool flushing) {
     // Get tasks from every depth
     size_t work = 0;
     for (WorkEntry &work_entry : work_queue_) {
-      work += IngestLane(work_entry, 0, flushing);
+      work += IngestLane(work_entry, min_depth, flushing);
     }
     return work;
 
@@ -526,15 +539,13 @@ class Worker {
               pending_.GetLongRunning().push(
                   PrivateTaskQueueEntry{task, &lane_info});
             } else if (task->prio_ == TaskPrio::kLowLatency) {
-              pending_.GetLowLatency(depth).push(
+              pending_.GetLowLatency(task->task_node_.node_depth_).push(
                   PrivateTaskQueueEntry{task, &lane_info});
             } else {
-              pending_.GetHighLatency(depth).push(
+              pending_.GetHighLatency(task->task_node_.node_depth_).push(
                   PrivateTaskQueueEntry{task, &lane_info});
             }
-            if (depth > 0) {
-              ++pending;
-            }
+            ++pending;
           } else {
             EndTask(exec, task);
           }
@@ -550,12 +561,12 @@ class Worker {
   HSHM_ALWAYS_INLINE
   void PollPending(bool flushing) {
     // Poll low-latency tasks
-    for (int depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1; depth >= 0; --depth) {
+    for (int depth = HSHM_WORKER_MAX_TASK_DEPTH - 1; depth >= 0; --depth) {
       PrivateTaskQueue &queue = pending_.GetLowLatency(depth);
       PollPrivateQueue(queue, flushing);
     }
     // Poll high-latency tasks
-    for (int depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1; depth >= 0; --depth) {
+    for (int depth = HSHM_WORKER_MAX_TASK_DEPTH - 1; depth >= 0; --depth) {
       PrivateTaskQueue &queue = pending_.GetHighLatency(depth);
       PollPrivateQueue(queue, flushing);
     }
@@ -843,39 +854,6 @@ class Worker {
       exec->Del(task->method_, task.ptr_);
     } else {
       task->SetComplete();
-    }
-  }
-
-  /** Print all queues */
-  void PrintQueues(bool no_long_run = false) {
-    for (std::unique_ptr<Worker> &worker : HRUN_WORK_ORCHESTRATOR->workers_) {
-      for (WorkEntry &work_entry : worker->work_queue_) {
-        for (u32 i = 0; i < work_entry.lanes_.size(); ++i) {
-          Lane *&lane = work_entry.lanes_[i];
-          LaneData *entry;
-          int off = 0;
-          while (!lane->peek(entry, off).IsNull()) {
-            Task *task = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
-            TaskState *exec = HRUN_TASK_REGISTRY->GetTaskState(task->task_state_);
-            bool is_remote = task->domain_id_.IsRemote(HRUN_RPC->GetNumHosts(),
-                                                       HRUN_CLIENT->node_id_);
-            if (no_long_run && task->IsLongRunning()) {
-              off += 1;
-              continue;
-            }
-            HILOG(kInfo,
-                  "(node {}, worker {}) Task {} state {}, method {}, is remote: {}, long_running: {}",
-                  HRUN_CLIENT->node_id_,
-                  worker->id_,
-                  task->task_node_,
-                  exec->name_,
-                  task->method_,
-                  is_remote,
-                  task->IsLongRunning());
-            off += 1;
-          }
-        }
-      }
     }
   }
 };

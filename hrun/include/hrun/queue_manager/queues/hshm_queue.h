@@ -8,7 +8,7 @@
 #include "hrun/queue_manager/queue.h"
 #include "mpsc_queue.h"
 
-#define HSHM_MAX_QUEUE_GROUP_DEPTH 1
+#define HSHM_MAX_QUEUE_GROUP_DEPTH 6
 
 namespace hrun {
 
@@ -93,6 +93,7 @@ struct LaneGroup : public PriorityInfo {
 
   /** Get lane */
   Lane& GetLane(u32 lane_id, u32 depth) {
+
     return (*lanes_)[lane_id * HSHM_MAX_QUEUE_GROUP_DEPTH + depth];
   }
 };
