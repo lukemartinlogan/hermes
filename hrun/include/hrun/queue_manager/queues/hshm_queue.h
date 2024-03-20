@@ -15,13 +15,11 @@ namespace hrun {
 /** The data stored in a lane */
 struct LaneData {
   hipc::Pointer p_;  /**< Pointer to SHM request */
-  bool complete_;    /**< Whether request is complete */
 
   LaneData() = default;
 
   LaneData(hipc::Pointer &p, bool complete) {
     p_ = p;
-    complete_ = complete;
   }
 };
 

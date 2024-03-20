@@ -41,13 +41,9 @@ namespace hrun {
 struct WorkEntry {
   u32 prio_;
   u32 lane_id_;
-  u32 count_;
   std::array<Lane*, HSHM_MAX_QUEUE_GROUP_DEPTH> lanes_;
   LaneGroup *group_;
   MultiQueue *queue_;
-  hshm::Timepoint last_monitor_;
-  hshm::Timepoint cur_time_;
-  double sample_epoch_;
 
   /** Default constructor */
   HSHM_ALWAYS_INLINE
@@ -61,8 +57,6 @@ struct WorkEntry {
     for (int depth = 0; depth < HSHM_MAX_QUEUE_GROUP_DEPTH; ++depth) {
       lanes_[depth] = &queue->GetLane(prio, lane_id, depth);
     }
-    count_ = 0;
-    cur_time_.Now();
   }
 
   /** Copy constructor */
@@ -73,7 +67,6 @@ struct WorkEntry {
     lanes_ = other.lanes_;
     group_ = other.group_;
     queue_ = other.queue_;
-    cur_time_.Now();
   }
 
   /** Copy assignment */
@@ -85,7 +78,6 @@ struct WorkEntry {
       lanes_ = other.lanes_;
       group_ = other.group_;
       queue_ = other.queue_;
-      cur_time_.Now();
     }
     return *this;
   }
@@ -98,7 +90,6 @@ struct WorkEntry {
     lanes_ = other.lanes_;
     group_ = other.group_;
     queue_ = other.queue_;
-    cur_time_.Now();
   }
 
   /** Move assignment */
@@ -110,7 +101,6 @@ struct WorkEntry {
       lanes_ = other.lanes_;
       group_ = other.group_;
       queue_ = other.queue_;
-      cur_time_.Now();
     }
     return *this;
   }
@@ -146,6 +136,108 @@ struct hash<hrun::WorkEntry> {
 
 namespace hrun {
 
+struct PrivateTaskQueueEntry {
+ public:
+  LPointer<Task> task_;
+  WorkEntry *lane_info_;
+
+ public:
+  PrivateTaskQueueEntry() = default;
+  PrivateTaskQueueEntry(const LPointer<Task> &task, WorkEntry *lane_info)
+  : task_(task), lane_info_(lane_info) {}
+
+  PrivateTaskQueueEntry(const PrivateTaskQueueEntry &other) {
+    task_ = other.task_;
+    lane_info_ = other.lane_info_;
+  }
+
+  PrivateTaskQueueEntry& operator=(const PrivateTaskQueueEntry &other) {
+    if (this != &other) {
+      task_ = other.task_;
+      lane_info_ = other.lane_info_;
+    }
+    return *this;
+  }
+
+  PrivateTaskQueueEntry(PrivateTaskQueueEntry &&other) noexcept {
+    task_ = other.task_;
+    lane_info_ = other.lane_info_;
+  }
+
+  PrivateTaskQueueEntry& operator=(PrivateTaskQueueEntry &&other) noexcept {
+    if (this != &other) {
+      task_ = other.task_;
+      lane_info_ = other.lane_info_;
+    }
+    return *this;
+  }
+};
+
+class PrivateTaskQueue {
+ public:
+  std::vector<PrivateTaskQueueEntry> queue_;
+  size_t size_, head_, tail_;
+
+ public:
+  PrivateTaskQueue(size_t queue_depth) {
+    queue_.resize(queue_depth);
+    size_ = 0;
+    tail_ = 0;
+    head_ = 0;
+  }
+
+  bool push(const PrivateTaskQueueEntry &entry) {
+    size_t diff = tail_ - head_;
+    if (diff >= queue_.size()) {
+      return false;
+    }
+    queue_[tail_ % queue_.size()] = entry;
+    ++size_;
+    ++tail_;
+    return true;
+  }
+
+  void peek(size_t off, PrivateTaskQueueEntry &entry) {
+    entry = queue_[off % queue_.size()];
+  }
+
+  void erase(size_t off) {
+    queue_[off].task_.ptr_ = nullptr;
+    --size_;
+    _correct_head();
+  }
+
+  void _correct_head() {
+    for (size_t i = head_; head_ < tail_; ++i) {
+      if (queue_[i].task_.ptr_ == nullptr) {
+        head_ = i;
+      } else {
+        break;
+      }
+    }
+  }
+};
+
+class PrivateTaskMultiQueue {
+ public:
+  std::vector<PrivateTaskQueue> low_lat_;
+  std::vector<PrivateTaskQueue> high_lat_;
+
+ public:
+  void Init(int max_task_depth, size_t queue_depth) {
+    low_lat_.resize(max_task_depth, queue_depth);
+    high_lat_.resize(max_task_depth, queue_depth);
+  }
+
+  PrivateTaskQueue& GetLowLatency(int task_depth) {
+    return low_lat_[task_depth];
+  }
+
+  PrivateTaskQueue& GetHighLatency(int task_depth) {
+    return high_lat_[task_depth];
+  }
+};
+
 class Worker {
  public:
   u32 id_;  /**< Unique identifier of this worker */
@@ -174,6 +266,12 @@ class Worker {
   hshm::spsc_queue<void*> stacks_;  /**< Cache of stacks for tasks */
   int num_stacks_ = 256;  /**< Number of stacks */
   int stack_size_ = KILOBYTES(64);
+  PrivateTaskMultiQueue
+      pending_;  /** Tasks pending to complete */
+  std::list<PrivateTaskQueueEntry>
+      long_running_;  /** Long running tasks pending to complete */
+  hshm::Timepoint cur_time_;  /**< The current timepoint */
+  size_t work_;
 
  public:
   /**===============================================================
@@ -189,22 +287,23 @@ class Worker {
     retries_ = 1;
     pid_ = 0;
     affinity_ = cpu_id;
-    thread_ = std::make_unique<std::thread>(&Worker::Loop, this);
-    pthread_id_ = thread_->native_handle();
     // TODO(llogan): implement reserve for group
     group_.resize(512);
     group_.resize(0);
-    xstream_ = xstream;
     stacks_.Resize(num_stacks_);
     for (int i = 0; i < 16; ++i) {
       stacks_.emplace(malloc(stack_size_));
     }
-    /* int ret = ABT_thread_create_on_xstream(xstream,
-                                           [](void *args) { ((Worker*)args)->Loop(); }, this,
-                                           ABT_THREAD_ATTR_NULL, &tl_thread_);
-    if (ret != ABT_SUCCESS) {
-      HELOG(kFatal, "Couldn't spawn worker");
-    }*/
+    // MAX_DEPTH * [LOW_LAT, LONG_LAT]
+    config::QueueManagerInfo &qm = HRUN_QM_RUNTIME->config_->queue_manager_;
+    pending_.Init(HSHM_MAX_QUEUE_GROUP_DEPTH,
+                  qm.queue_depth_);
+    cur_time_.Now();
+
+    // Spawn threads
+    xstream_ = xstream;
+    thread_ = std::make_unique<std::thread>(&Worker::Loop, this);
+    pthread_id_ = thread_->native_handle();
   }
 
   /** Constructor without threading */
@@ -236,6 +335,7 @@ class Worker {
         work_queue_.emplace_back(entry);
       }
     }
+    HILOG(kInfo, "Worker {} has {} lanes", id_, work_queue_.size())
   }
 
   /**
@@ -363,103 +463,173 @@ class Worker {
 
   /** Run a single iteration over all queues */
   void Run(bool flushing) {
+    work_ = 0;
+    // Are there any queues pending scheduling
     if (poll_queues_.size() > 0) {
       _PollQueues();
     }
+    // Are there any queues pending descheduling
     if (relinquish_queues_.size() > 0) {
       _RelinquishQueues();
     }
+    // Ingest tasks from the ingress queues
+    IngestLanes(flushing);
+    // Process tasks in the pending queues
+    PollPending(flushing);
+  }
+
+  /** Ingest all lanes */
+  HSHM_ALWAYS_INLINE
+  size_t IngestLanes(bool flushing) {
+    // Get tasks from every depth
+    size_t work = 0;
     for (WorkEntry &work_entry : work_queue_) {
-      PollGrouped(work_entry, flushing);
+      work += IngestLane(work_entry, 0, flushing);
     }
-//    if (!IsContinuousPolling()) {
-//      now_.Now();
+    return work;
+
+    // Keep processing tasks with depth > 1
+//    for (size_t i = 0; i < 4; ++i) {
+//      size_t work = 0;
 //      for (WorkEntry &work_entry : work_queue_) {
-//        work_entry.cur_time_ = now_;
-//        PollGrouped(work_entry, flushing);
+//        work += IngestLane(work_entry, 1, flushing);
 //      }
-//    } else {
-//      for (WorkEntry &work_entry : work_queue_) {
-//        PollGrouped(work_entry, flushing);
+//      if (work) {
+//        break;
 //      }
 //    }
   }
 
+  /** Ingest a lane */
+  HSHM_ALWAYS_INLINE
+  size_t IngestLane(WorkEntry &lane_info, int min_depth, bool flushing) {
+    // Ingest tasks from the ingress queues
+    size_t pending = 0;
+    for (int depth = min_depth; depth < HSHM_MAX_QUEUE_GROUP_DEPTH; ++depth) {
+      Lane *&lane = lane_info.lanes_[depth];
+      LaneData entry;
+      while (true) {
+        if (!lane->pop(entry).IsNull()) {
+          LPointer<Task> task;
+          task.shm_ = entry.p_;
+          task.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(entry.p_);
+          TaskState *exec =
+              RunTask(lane_info, task, lane_info.lane_id_, flushing);
+          if (!task->IsModuleComplete()) {
+            if (task->IsLongRunning()) {
+              long_running_.emplace_back(
+                  PrivateTaskQueueEntry{task, &lane_info});
+            } else if (task->prio_ == TaskPrio::kLowLatency) {
+              pending_.GetLowLatency(depth).push(
+                  PrivateTaskQueueEntry{task, &lane_info});
+            } else {
+              pending_.GetHighLatency(depth).push(
+                  PrivateTaskQueueEntry{task, &lane_info});
+            }
+            if (depth > 0) {
+              ++pending;
+            }
+          } else {
+            EndTask(exec, task);
+          }
+        } else {
+          break;
+        }
+      }
+    }
+    return pending;
+  }
+
   /** Run an iteration over a particular queue */
   HSHM_ALWAYS_INLINE
-  void PollGrouped(WorkEntry &work_entry, bool flushing) {
+  void PollPending(bool flushing) {
+    // Poll low-latency tasks
     for (int depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1; depth >= 0; --depth) {
-      PollLane(work_entry, depth, flushing);
+      PrivateTaskQueue &queue = pending_.GetLowLatency(depth);
+      PollPrivateQueue(queue, flushing);
+    }
+    // Poll high-latency tasks
+    for (int depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1; depth >= 0; --depth) {
+      PrivateTaskQueue &queue = pending_.GetHighLatency(depth);
+      PollPrivateQueue(queue, flushing);
+    }
+    // Poll long-running tasks
+    PollLongRunningQueue(flushing);
+  }
+
+  /** Poll the set of tasks in the private queue */
+  void PollPrivateQueue(PrivateTaskQueue &queue, bool flushing) {
+    for (size_t i = queue.head_; i < queue.tail_; ++i) {
+      PrivateTaskQueueEntry entry;
+      queue.peek(i, entry);
+      if (entry.task_.ptr_ != nullptr) {
+        TaskState *exec = RunTask(*entry.lane_info_,
+                                  entry.task_,
+                                  entry.lane_info_->lane_id_,
+                                  flushing);
+        if (entry.task_->IsModuleComplete()) {
+          EndTask(exec, entry.task_);
+          queue.erase(i);
+        }
+      }
     }
   }
 
-  /** Get task state */
-  HSHM_ALWAYS_INLINE
-  TaskState* GetTaskState(const TaskStateId &state_id) {
-    auto it = state_map_.find(state_id);
-    if (it == state_map_.end()) {
-      TaskState *state = HRUN_TASK_REGISTRY->GetTaskState(state_id);
-      if (state == nullptr) {
-        return nullptr;
+  /** Poll long-running queue */
+  void PollLongRunningQueue(bool flushing) {
+    for (PrivateTaskQueueEntry &entry : long_running_) {
+      TaskState *exec = RunTask(*entry.lane_info_,
+                                entry.task_,
+                                entry.lane_info_->lane_id_,
+                                flushing);
+      if (entry.task_->IsModuleComplete()) {
+        EndTask(exec, entry.task_);
       }
-      state_map_.emplace(state_id, state);
-      return state_map_[state_id];
     }
-    return it->second;
   }
 
   /** Run a task */
-  HSHM_ALWAYS_INLINE
-  bool PollLane(WorkEntry &work_entry, int depth, bool flushing) {
-    bool did_work = false;
-    int off = 0;
-    Task *task;
-    LaneData *entry;
-    Lane *&lane = work_entry.lanes_[depth];
-    off = 0;
-    // HILOG(kDebug, "Polling lane {} (worker={})", lane->id_, id_
-    while (!lane->peek(entry, off).IsNull()) {
-      // Get the task message
-      if (entry->complete_) {
-        PopTask(lane, off);
-        continue;
-      }
-      task = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
-      // Get the task state
-      TaskState *exec = GetTaskState(task->task_state_);
-      if (!exec) {
-        HELOG(kWarning, "(node {}) Could not find the task state: {}",
-              HRUN_CLIENT->node_id_, task->task_state_);
-        off += 1;
-        // PrintQueues();
-        // entry->complete_ = true;
-        // EndTask(lane, exec, task, off);
-        continue;
-      }
-      // Pack runtime context
-      RunContext &rctx = task->ctx_;
-      rctx.lane_id_ = work_entry.lane_id_;
-      rctx.flush_ = &flush_;
-      rctx.exec_ = exec;
-      // Get task properties
-      bitfield32_t props =
-          GetTaskProperties(task, exec, work_entry, flushing);
-      // Execute the task based on its properties
-      ExecTask(work_entry, task, rctx,
-               exec, props);
-      // Cleanup on task completion
-      CleanupTask(lane, entry, work_entry, off,
-                  task, rctx, exec, props);
-      did_work = true;
+  TaskState* RunTask(WorkEntry &lane_info,
+                     LPointer<Task> task,
+                     u32 lane_id,
+                     bool flushing) {
+    // Get the task state
+    TaskState *exec = GetTaskState(task->task_state_);
+    if (!exec) {
+      HELOG(kWarning, "(node {}) Could not find the task state: {}",
+            HRUN_CLIENT->node_id_, task->task_state_);
+      return exec;
     }
-    return did_work;
+    // Pack runtime context
+    RunContext &rctx = task->ctx_;
+    rctx.flush_ = &flush_;
+    rctx.exec_ = exec;
+    // Get task properties
+    bitfield32_t props =
+        GetTaskProperties(task.ptr_, exec, cur_time_,
+                          lane_id, flushing);
+    // Execute the task based on its properties
+    ExecTask(lane_info, task.ptr_, rctx, exec, props);
+    // Cleanup allocations
+    if (task->IsModuleComplete()) {
+      if (task->IsCoroutine() &&
+          !props.Any(HSHM_WORKER_IS_REMOTE) &&
+          !task->IsLaneAll()) {
+        FreeStack(rctx.stack_ptr_);
+      }
+      RemoveTaskGroup(task.ptr_, exec,
+                      lane_id,
+                      props.Any(HSHM_WORKER_IS_REMOTE));
+    }
+    return exec;
   }
 
   /** Get the characteristics of a task */
   HSHM_ALWAYS_INLINE
   bitfield32_t GetTaskProperties(Task *&task,
                                  TaskState *&exec,
-                                 WorkEntry &work_entry,
+                                 hshm::Timepoint &cur_time,
+                                 u32 lane_id,
                                  bool flushing) {
     bitfield32_t props;
     bool is_remote = task->domain_id_.IsRemote(
@@ -473,10 +643,10 @@ class Worker {
         }
 #endif
     bool group_avail = CheckTaskGroup(task, exec,
-                                      work_entry.lane_id_,
+                                      lane_id,
                                       task->task_node_,
                                       is_remote);
-    bool should_run = task->ShouldRun(work_entry.cur_time_, flushing);
+    bool should_run = task->ShouldRun(cur_time, flushing);
     if (is_remote) {
       props.SetBits(HSHM_WORKER_IS_REMOTE);
     }
@@ -497,7 +667,7 @@ class Worker {
   
   /** Run an arbitrary task */
   HSHM_ALWAYS_INLINE
-  void ExecTask(WorkEntry &work_entry,
+  bool ExecTask(WorkEntry &lane_info,
                 Task *&task,
                 RunContext &rctx,
                 TaskState *&exec,
@@ -505,7 +675,10 @@ class Worker {
     // Determine if a task should be executed
     if (task->IsRunDisabled() ||
         !props.All(HSHM_WORKER_GROUP_AVAIL | HSHM_WORKER_SHOULD_RUN)) {
-      return;
+      return false;
+    }
+    if (!task->IsLongRunning()) {
+      work_ += 1;
     }
     // Flush tasks
     if (props.Any(HSHM_WORKER_IS_FLUSHING) && !task->IsFlush()) {
@@ -527,8 +700,8 @@ class Worker {
       task->SetDisableRun();
     } else if (task->IsLaneAll()) {
       HRUN_REMOTE_QUEUE->DisperseLocal(task, exec,
-                                       work_entry.queue_,
-                                       work_entry.group_);
+                                       lane_info.queue_,
+                                       lane_info.group_);
       task->SetDisableRun();
     } else if (task->IsCoroutine()) {
       ExecCoroutine(task, rctx);
@@ -536,11 +709,12 @@ class Worker {
       exec->Run(task->method_, task, rctx);
       task->SetStarted();
     }
-    task->DidRun(work_entry.cur_time_);
     // Monitoring callback
     if (task->IsModuleComplete()) {
       exec->Monitor(MonitorMode::kEndTrainTime, task, rctx);
     }
+    task->DidRun(cur_time_);
+    return !task->IsFlush();
   }
 
   /** Run a task */
@@ -561,40 +735,13 @@ class Worker {
     // Jump to CoroutineEntry
     rctx.jmp_ = bctx::jump_fcontext(rctx.jmp_.fctx, task);
     // Rebuild stack pointer if coroutine is not done
-    if (!task->IsStarted()) {
-      rctx.jmp_.fctx = bctx::make_fcontext(
-          (char *) rctx.stack_ptr_ + stack_size_,
-          stack_size_, &Worker::CoroutineEntry);
-      task->SetStarted();
-    }
-  }
-
-  /** Remove tasks */
-  HSHM_ALWAYS_INLINE
-  void CleanupTask(
-      Lane *lane,
-      LaneData *&entry,
-      WorkEntry &work_entry,
-      int &off,
-      Task *&task,
-      RunContext &rctx,
-      TaskState *&exec,
-      bitfield32_t &props) {
-    // Cleanup on task completion
-    if (task->IsModuleComplete()) {
-      entry->complete_ = true;
-      if (task->IsCoroutine() &&
-          !props.Any(HSHM_WORKER_IS_REMOTE) &&
-          !task->IsLaneAll()) {
-        FreeStack(rctx.stack_ptr_);
-      }
-      RemoveTaskGroup(task, exec,
-                      work_entry.lane_id_,
-                      props.Any(HSHM_WORKER_IS_REMOTE));
-      EndTask(lane, exec, task, off);
-    } else {
-      off += 1;
-    }
+    // NOTE(llogan): Not entirely sure if this is needed
+//    if (!task->IsStarted()) {
+//      rctx.jmp_.fctx = bctx::make_fcontext(
+//          (char *) rctx.stack_ptr_ + stack_size_,
+//          stack_size_, &Worker::CoroutineEntry);
+//      task->SetStarted();
+//    }
   }
 
   /** Run a coroutine */
@@ -604,13 +751,29 @@ class Worker {
     TaskState *&exec = rctx.exec_;
     rctx.jmp_ = t;
     exec->Run(task->method_, task, rctx);
-    task->UnsetStarted();
+    // NOTE(llogan): Not entirely sure if this is needed
+    // task->UnsetStarted();
     task->Yield<TASK_YIELD_CO>();
   }
 
   /**===============================================================
    * Task Ordering and Completion
    * =============================================================== */
+
+  /** Get task state */
+  HSHM_ALWAYS_INLINE
+  TaskState* GetTaskState(const TaskStateId &state_id) {
+    auto it = state_map_.find(state_id);
+    if (it == state_map_.end()) {
+      TaskState *state = HRUN_TASK_REGISTRY->GetTaskState(state_id);
+      if (state == nullptr) {
+        return nullptr;
+      }
+      state_map_.emplace(state_id, state);
+      return state_map_[state_id];
+    }
+    return it->second;
+  }
 
   /** Check if two tasks can execute concurrently */
   // HSHM_ALWAYS_INLINE
@@ -682,22 +845,11 @@ class Worker {
 
   /** Free a task when it is no longer needed */
   HSHM_ALWAYS_INLINE
-  void EndTask(Lane *lane, TaskState *exec, Task *task, int &off) {
-    PopTask(lane, off);
+  void EndTask(TaskState *exec, LPointer<Task> &task) {
     if (exec && task->IsFireAndForget()) {
-      exec->Del(task->method_, task);
+      exec->Del(task->method_, task.ptr_);
     } else {
       task->SetComplete();
-    }
-  }
-
-  /** Pop a task if it's the first entry of the queue */
-  HSHM_ALWAYS_INLINE
-  void PopTask(Lane *lane, int &off) {
-    if (off == 0) {
-      lane->pop();
-    } else {
-      off += 1;
     }
   }
 

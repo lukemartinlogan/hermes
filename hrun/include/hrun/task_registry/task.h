@@ -230,10 +230,10 @@ struct TaskFlags : public IsTask {
 class TaskPrio {
  public:
   TASK_PRIO_T kAdmin = 0;              /**< Admin task lane */
-  TASK_PRIO_T kLongRunning = 1;        /**< Long-running task lane */
-  TASK_PRIO_T kLowLatency = 2;         /**< Low latency task lane */
-  TASK_PRIO_T kLongRunningTether = 3;  /**< Tethered to low latency workers */
-  TASK_PRIO_T kHighLatency = 4;        /**< High latency task lane */
+  TASK_PRIO_T kLowLatency = 1;         /**< Low latency task lane */
+  TASK_PRIO_T kHighLatency = 2;        /**< High latency task lane */
+  TASK_PRIO_T kLongRunning = 2;        /**< Long-running task lane */
+  TASK_PRIO_T kLongRunningTether = 2;  /**< Tethered to low latency workers */
 };
 
 /** Used to indicate the amount of work remaining to do when flushing */
@@ -277,6 +277,7 @@ struct Task : public hipc::ShmContainer {
   u32 lane_hash_;              /**< Determine the lane a task is keyed to */
   u32 method_;                 /**< The method to call in the state */
   bitfield32_t task_flags_;    /**< Properties of the task */
+  std::atomic<u32> atask_flags_ = 0;    /**< Properties of the task */
   double period_ns_;           /**< The period of the task */
   hshm::Timepoint start_;      /**< The time the task started */
   RunContext ctx_;
@@ -290,12 +291,22 @@ struct Task : public hipc::ShmContainer {
 
   /** Set task as externally complete */
   HSHM_ALWAYS_INLINE void SetModuleComplete() {
-    task_flags_.SetBits(TASK_MODULE_COMPLETE);
+    atask_flags_ |= TASK_MODULE_COMPLETE;
   }
 
   /** Check if a task marked complete externally */
   HSHM_ALWAYS_INLINE bool IsModuleComplete() {
-    return task_flags_.Any(TASK_MODULE_COMPLETE);
+    return atask_flags_.load() & TASK_MODULE_COMPLETE;
+  }
+
+  /** Set task as complete */
+  HSHM_ALWAYS_INLINE void SetComplete() {
+    atask_flags_ |= TASK_MODULE_COMPLETE | TASK_COMPLETE;
+  }
+
+  /** Check if task is complete */
+  HSHM_ALWAYS_INLINE bool IsComplete() {
+    return atask_flags_ & TASK_COMPLETE;
   }
 
   /** Check if a task is fire & forget */
@@ -321,16 +332,6 @@ struct Task : public hipc::ShmContainer {
   /** Set task as unordered */
   HSHM_ALWAYS_INLINE bool SetUnordered() {
     return task_flags_.Any(TASK_UNORDERED);
-  }
-
-  /** Set task as complete */
-  HSHM_ALWAYS_INLINE void SetComplete() {
-    task_flags_.SetBits(TASK_MODULE_COMPLETE | TASK_COMPLETE);
-  }
-
-  /** Check if task is complete */
-  HSHM_ALWAYS_INLINE bool IsComplete() {
-    return task_flags_.Any(TASK_COMPLETE);
   }
 
   /** Disable the running of a task */
@@ -442,7 +443,8 @@ struct Task : public hipc::ShmContainer {
       start_ = cur_time;
       return true;
     }
-    return start_.GetNsecFromStart(cur_time) >= period_ns_;
+    // return start_.GetNsecFromStart(cur_time) >= period_ns_;
+    return true;
   }
 
   /** Mark this task as having been run */
@@ -467,11 +469,14 @@ struct Task : public hipc::ShmContainer {
   template<int THREAD_MODEL = 0>
   void Wait() {
     while (!IsComplete()) {
-//      for (int i = 0; i < 100000; ++i) {
-//        if (IsComplete()) {
-//          return;
-//        }
-//      }
+      if constexpr (THREAD_MODEL == TASK_YIELD_STD) {
+        for (int i = 0; i < 100000; ++i) {
+          if (IsComplete()) {
+            std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
+            return;
+          }
+        }
+      }
       Yield<THREAD_MODEL>();
     }
   }
@@ -524,6 +529,7 @@ struct Task : public hipc::ShmContainer {
     method_ = method;
     domain_id_ = domain_id;
     task_flags_ = task_flags;
+    atask_flags_ = task_flags.bits_;
   }
 
   /**====================================
@@ -570,7 +576,7 @@ struct Task : public hipc::ShmContainer {
   void task_serialize(Ar &ar) {
     // NOTE(llogan): don't serialize start_ because of clock drift
     ar(task_state_, task_node_, domain_id_, lane_hash_, prio_, method_,
-       task_flags_, period_ns_);
+       task_flags_, atask_flags_, period_ns_);
   }
 
   template<typename TaskT>
@@ -582,6 +588,7 @@ struct Task : public hipc::ShmContainer {
     prio_ = other.prio_;
     method_ = other.method_;
     task_flags_ = other.task_flags_;
+    atask_flags_ = other.atask_flags_.load();
     period_ns_ = other.period_ns_;
     start_ = other.start_;
   }
