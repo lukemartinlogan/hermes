@@ -40,17 +40,20 @@ class Server : public TaskLib {
       case PushTaskPhase::kSchedule: {
         task->sub_run_.shm_ = task->sub_cli_.shm_;
         task->sub_run_.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(task->sub_cli_.shm_);
-        Task *&ptr = task->sub_run_.ptr_;
+        Task *&sub_run = task->sub_run_.ptr_;
 //        HILOG(kDebug, "Scheduling task {} on state {} tid {}",
 //              ptr->task_node_, ptr->task_state_, GetLinuxTid());
-        if (ptr->IsFireAndForget()) {
-          ptr->UnsetFireAndForget();
+        if (sub_run->IsFireAndForget()) {
+          sub_run->UnsetFireAndForget();
           task->is_fire_forget_ = true;
         }
-        MultiQueue *real_queue = HRUN_CLIENT->GetQueue(QueueId(ptr->task_state_));
+        MultiQueue *real_queue = HRUN_CLIENT->GetQueue(
+            QueueId(sub_run->task_state_));
+        task->ctx_.pending_on_ = sub_run;
+        sub_run->ctx_.pending_to_ = task;
         bool ret = real_queue->Emplace(
-            ptr->prio_, ptr->lane_hash_,
-            ptr->task_node_.node_depth_, task->sub_run_.shm_);
+            sub_run->prio_, sub_run->lane_hash_,
+            sub_run->task_node_.node_depth_, task->sub_run_.shm_);
         if (ret) {
           task->phase_ = PushTaskPhase::kWaitSchedule;
         }

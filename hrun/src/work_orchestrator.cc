@@ -71,7 +71,7 @@ void WorkOrchestrator::ServerInit(ServerConfig *config, QueueManager &qm) {
   }
 
   // Schedule admin queue on first overlapping worker
-  MultiQueue *admin_queue = qm.GetQueue(qm.admin_queue_);
+  MultiQueue *admin_queue = qm.GetQueue(qm.admin_queue_id_);
   LaneGroup *admin_group = &admin_queue->GetGroup(0);
   for (u32 lane_id = 0; lane_id < admin_group->num_lanes_; ++lane_id) {
     admin_worker_->PollQueues({WorkEntry(0, lane_id, admin_queue)});

@@ -514,10 +514,13 @@ class Worker {
     if (relinquish_queues_.size() > 0) {
       _RelinquishQueues();
     }
-    // Ingest tasks from the ingress queues
-    IngestLanes();
     // Process tasks in the pending queues
-    PollPending(flushing);
+    for (size_t i = 0; i < (1 << 18); ++i) {
+      IngestLanes();
+      PollPrivateQueue(pending_.GetLowLatency(), flushing);
+    }
+    PollPrivateQueue(pending_.GetHighLatency(), flushing);
+    PollPrivateQueue(pending_.GetLongRunning(), flushing);
   }
 
   /** Ingest all lanes */
@@ -540,14 +543,6 @@ class Worker {
       task.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(entry.p_);
       pending_.push(PrivateTaskQueueEntry{task, &lane_info});
     }
-  }
-
-  /** Run an iteration over a particular queue */
-  HSHM_ALWAYS_INLINE
-  void PollPending(bool flushing) {
-    PollPrivateQueue(pending_.GetLowLatency(), flushing);
-    PollPrivateQueue(pending_.GetHighLatency(), flushing);
-    PollPrivateQueue(pending_.GetLongRunning(), flushing);
   }
 
   /** Poll the set of tasks in the private queue */

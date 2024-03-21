@@ -70,7 +70,7 @@ void Runtime::ServerInit(std::string server_config_path) {
   task_registry_.CreateTaskState(
       "proc_queue",
       "proc_queue",
-      HRUN_QM_CLIENT->process_queue_,
+      HRUN_QM_CLIENT->process_queue_id_,
       admin_task.get());
 
   // Create the work orchestrator queue scheduling library
