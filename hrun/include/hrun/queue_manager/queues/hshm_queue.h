@@ -8,8 +8,6 @@
 #include "hrun/queue_manager/queue.h"
 #include "mpsc_queue.h"
 
-#define HSHM_MAX_QUEUE_GROUP_DEPTH 6
-
 namespace hrun {
 
 /** The data stored in a lane */
@@ -92,9 +90,8 @@ struct LaneGroup : public PriorityInfo {
   }
 
   /** Get lane */
-  Lane& GetLane(u32 lane_id, u32 depth) {
-
-    return (*lanes_)[lane_id * HSHM_MAX_QUEUE_GROUP_DEPTH + depth];
+  Lane& GetLane(u32 lane_id) {
+    return (*lanes_)[lane_id];
   }
 };
 
@@ -134,10 +131,8 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
       // Initialize lanes
       HSHM_MAKE_AR0(lane_group.lanes_, GetAllocator());
       lane_group.lanes_->reserve(
-          prio_info.max_lanes_ * HSHM_MAX_QUEUE_GROUP_DEPTH);
-      for (u32 lane_id = 0;
-           lane_id < lane_group.num_lanes_ * HSHM_MAX_QUEUE_GROUP_DEPTH;
-           ++lane_id) {
+          prio_info.max_lanes_);
+      for (u32 lane_id = 0; lane_id < lane_group.num_lanes_; ++lane_id) {
         lane_group.lanes_->emplace_back(lane_group.depth_, id_);
         Lane &lane = lane_group.lanes_->back();
         lane.flags_ = prio_info.flags_;
@@ -232,14 +227,14 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
   }
 
   /** Get a lane of the queue */
-  HSHM_ALWAYS_INLINE Lane& GetLane(u32 prio, u32 lane_id, u32 depth) {
-    return GetLane(GetGroup(prio), lane_id, depth);
+  HSHM_ALWAYS_INLINE Lane& GetLane(u32 prio, u32 lane_id) {
+    return GetLane(GetGroup(prio), lane_id);
   }
 
   /** Get a lane of the queue */
   HSHM_ALWAYS_INLINE Lane& GetLane(LaneGroup &lane_group,
-                                   u32 lane_id, u32 depth) {
-    return lane_group.GetLane(lane_id, depth);
+                                   u32 lane_id) {
+    return lane_group.GetLane(lane_id);
   }
 
   /** Emplace a SHM pointer to a task */
@@ -256,10 +251,7 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
     }
     LaneGroup &lane_group = GetGroup(prio);
     u32 lane_id = lane_hash % lane_group.num_lanes_;
-    if (depth >= HSHM_MAX_QUEUE_GROUP_DEPTH) {
-      depth = HSHM_MAX_QUEUE_GROUP_DEPTH - 1;
-    }
-    Lane &lane = GetLane(lane_group, lane_id, depth);
+    Lane &lane = GetLane(lane_group, lane_id);
     hshm::qtok_t ret = lane.emplace(data);
     return !ret.IsNull();
   }

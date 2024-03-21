@@ -55,7 +55,7 @@ class Server : public TaskLib {
           u32 worker_id;
           if (lane_group.IsTethered()) {
             LaneGroup &tether_group = queue.GetGroup(lane_group.tether_);
-            Lane &tether_lane = tether_group.GetLane(lane_id, 0);
+            Lane &tether_lane = tether_group.GetLane(lane_id);
             Worker &worker = *HRUN_WORK_ORCHESTRATOR->workers_[tether_lane.worker_id_];
             worker.PollQueues({WorkEntry(lane_group.prio_, lane_id, &queue)});
             worker_id = worker.id_;
@@ -78,10 +78,8 @@ class Server : public TaskLib {
             HILOG(kInfo, "(node {}) Scheduling the queue {} (prio {}, lane {}, worker {})",
                   HRUN_CLIENT->node_id_, queue.id_, lane_group.prio_, lane_id, worker_off);
           }
-          for (int depth = 0; depth < HSHM_MAX_QUEUE_GROUP_DEPTH; ++depth) {
-            Lane &lane = lane_group.GetLane(lane_id, depth);
-            lane.worker_id_ = worker_id;
-          }
+          Lane &lane = lane_group.GetLane(lane_id);
+          lane.worker_id_ = worker_id;
         }
         lane_group.num_scheduled_ = num_lanes;
       }

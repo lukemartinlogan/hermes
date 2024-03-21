@@ -23,8 +23,6 @@
 #include "affinity.h"
 #include "hrun/network/rpc_thallium.h"
 
-#define HSHM_WORKER_MAX_TASK_DEPTH HSHM_MAX_QUEUE_GROUP_DEPTH
-
 static inline pid_t GetLinuxTid() {
   return syscall(SYS_gettid);
 }
@@ -43,7 +41,7 @@ namespace hrun {
 struct WorkEntry {
   u32 prio_;
   u32 lane_id_;
-  std::array<Lane*, HSHM_MAX_QUEUE_GROUP_DEPTH> lanes_;
+  Lane *lane_;
   LaneGroup *group_;
   MultiQueue *queue_;
 
@@ -56,9 +54,7 @@ struct WorkEntry {
   WorkEntry(u32 prio, u32 lane_id, MultiQueue *queue)
   : prio_(prio), lane_id_(lane_id), queue_(queue) {
     group_ = &queue->GetGroup(prio);
-    for (int depth = 0; depth < HSHM_MAX_QUEUE_GROUP_DEPTH; ++depth) {
-      lanes_[depth] = &queue->GetLane(prio, lane_id, depth);
-    }
+    lane_ = &queue->GetLane(prio, lane_id);
   }
 
   /** Copy constructor */
@@ -66,7 +62,7 @@ struct WorkEntry {
   WorkEntry(const WorkEntry &other) {
     prio_ = other.prio_;
     lane_id_ = other.lane_id_;
-    lanes_ = other.lanes_;
+    lane_ = other.lane_;
     group_ = other.group_;
     queue_ = other.queue_;
   }
@@ -77,7 +73,7 @@ struct WorkEntry {
     if (this != &other) {
       prio_ = other.prio_;
       lane_id_ = other.lane_id_;
-      lanes_ = other.lanes_;
+      lane_ = other.lane_;
       group_ = other.group_;
       queue_ = other.queue_;
     }
@@ -89,7 +85,7 @@ struct WorkEntry {
   WorkEntry(WorkEntry &&other) noexcept {
     prio_ = other.prio_;
     lane_id_ = other.lane_id_;
-    lanes_ = other.lanes_;
+    lane_ = other.lane_;
     group_ = other.group_;
     queue_ = other.queue_;
   }
@@ -100,7 +96,7 @@ struct WorkEntry {
     if (this != &other) {
       prio_ = other.prio_;
       lane_id_ = other.lane_id_;
-      lanes_ = other.lanes_;
+      lane_ = other.lane_;
       group_ = other.group_;
       queue_ = other.queue_;
     }
@@ -181,34 +177,51 @@ class PrivateTaskQueue {
   size_t size_, head_, tail_;
 
  public:
-  PrivateTaskQueue(size_t queue_depth) {
+  void Init(size_t queue_depth) {
     queue_.resize(queue_depth);
     size_ = 0;
     tail_ = 0;
     head_ = 0;
   }
 
+  HSHM_ALWAYS_INLINE
   bool push(const PrivateTaskQueueEntry &entry) {
+    size_t off;
+    return push(entry, off);
+  }
+
+  HSHM_ALWAYS_INLINE
+  bool push(const PrivateTaskQueueEntry &entry, size_t &off) {
     size_t diff = tail_ - head_;
     if (diff >= queue_.size()) {
       return false;
     }
     queue_[tail_ % queue_.size()] = entry;
+    off = tail_;
     ++size_;
     ++tail_;
     return true;
   }
 
+  HSHM_ALWAYS_INLINE
   void peek(size_t off, PrivateTaskQueueEntry &entry) {
     entry = queue_[off % queue_.size()];
   }
 
+  HSHM_ALWAYS_INLINE
+  void pop(size_t off, PrivateTaskQueueEntry &entry) {
+    peek(off, entry);
+    erase(off);
+  }
+
+  HSHM_ALWAYS_INLINE
   void erase(size_t off) {
     queue_[off % queue_.size()].task_.ptr_ = nullptr;
     --size_;
     _correct_head();
   }
 
+  HSHM_ALWAYS_INLINE
   void _correct_head() {
     for (size_t i = head_; head_ < tail_; ++i) {
       if (queue_[i % queue_.size()].task_.ptr_ == nullptr) {
@@ -222,33 +235,51 @@ class PrivateTaskQueue {
 
 class PrivateTaskMultiQueue {
  public:
-  std::vector<PrivateTaskQueue> low_lat_;
-  std::vector<PrivateTaskQueue> high_lat_;
-  std::vector<PrivateTaskQueue> long_running_;
+  PrivateTaskQueue low_lat_;
+  PrivateTaskQueue high_lat_;
+  PrivateTaskQueue long_running_;
+  PrivateTaskQueue pending_;
 
  public:
-  void Init(int max_task_depth, size_t queue_depth) {
-    low_lat_.resize(max_task_depth, queue_depth);
-    high_lat_.resize(max_task_depth, queue_depth);
-    long_running_.resize(1, queue_depth);
+  void Init(size_t queue_depth) {
+    low_lat_.Init(queue_depth);
+    high_lat_.Init(queue_depth);
+    long_running_.Init(queue_depth);
+    pending_.Init(queue_depth);
   }
 
-  PrivateTaskQueue& GetLowLatency(int task_depth) {
-    if (task_depth >= low_lat_.size()) {
-      task_depth = low_lat_.size() - 1;
-    }
-    return low_lat_[task_depth];
+  PrivateTaskQueue& GetLowLatency() {
+    return low_lat_;
   }
 
-  PrivateTaskQueue& GetHighLatency(int task_depth) {
-    if (task_depth >= high_lat_.size()) {
-      task_depth = high_lat_.size() - 1;
-    }
-    return high_lat_[task_depth];
+  PrivateTaskQueue& GetHighLatency() {
+    return high_lat_;
   }
 
   PrivateTaskQueue& GetLongRunning() {
-    return long_running_[0];
+    return long_running_;
+  }
+
+  void push(const PrivateTaskQueueEntry &entry) {
+    Task *task = entry.task_.ptr_;
+    if (task->IsLongRunning()) {
+      GetLongRunning().push(entry);
+    } else if (task->prio_ == TaskPrio::kLowLatency) {
+      GetLowLatency().push(entry);
+    } else {
+      GetHighLatency().push(entry);
+    }
+  }
+
+  void push_pending(const PrivateTaskQueueEntry &entry) {
+    pending_.push(entry, entry.task_->ctx_.pending_key_);
+  }
+
+  void pop_pending(Task *pending_to) {
+    PrivateTaskQueueEntry entry;
+    pending_.pop(pending_to->ctx_.pending_key_, entry);
+    pending_to->ctx_.pending_on_ = nullptr;
+    push(entry);
   }
 };
 
@@ -282,8 +313,6 @@ class Worker {
   int stack_size_ = KILOBYTES(64);
   PrivateTaskMultiQueue
       pending_;  /** Tasks pending to complete */
-  std::list<PrivateTaskQueueEntry>
-      long_running_;  /** Long running tasks pending to complete */
   hshm::Timepoint cur_time_;  /**< The current timepoint */
   size_t work_;
 
@@ -310,8 +339,7 @@ class Worker {
     }
     // MAX_DEPTH * [LOW_LAT, LONG_LAT]
     config::QueueManagerInfo &qm = HRUN_QM_RUNTIME->config_->queue_manager_;
-    pending_.Init(HSHM_WORKER_MAX_TASK_DEPTH,
-                  qm.queue_depth_);
+    pending_.Init(qm.queue_depth_);
     cur_time_.Now();
 
     // Spawn threads
@@ -487,113 +515,66 @@ class Worker {
       _RelinquishQueues();
     }
     // Ingest tasks from the ingress queues
-    IngestLanes(0, flushing);
-    for (size_t i = 0; i < 10; ++i) {
-      if (!IngestLanes(1, flushing)) {
-        break;
-      }
-    }
+    IngestLanes();
     // Process tasks in the pending queues
     PollPending(flushing);
   }
 
   /** Ingest all lanes */
   HSHM_ALWAYS_INLINE
-  size_t IngestLanes(size_t min_depth, bool flushing) {
-    // Get tasks from every depth
-    size_t work = 0;
+  void IngestLanes() {
     for (WorkEntry &work_entry : work_queue_) {
-      work += IngestLane(work_entry, min_depth, flushing);
+      IngestLane(work_entry);
     }
-    return work;
-
-    // Keep processing tasks with depth > 1
-//    for (size_t i = 0; i < 4; ++i) {
-//      size_t work = 0;
-//      for (WorkEntry &work_entry : work_queue_) {
-//        work += IngestLane(work_entry, 1, flushing);
-//      }
-//      if (work) {
-//        break;
-//      }
-//    }
   }
 
   /** Ingest a lane */
   HSHM_ALWAYS_INLINE
-  size_t IngestLane(WorkEntry &lane_info, int min_depth, bool flushing) {
+  void IngestLane(WorkEntry &lane_info) {
     // Ingest tasks from the ingress queues
-    size_t pending = 0;
-    for (int depth = min_depth; depth < HSHM_MAX_QUEUE_GROUP_DEPTH; ++depth) {
-      Lane *&lane = lane_info.lanes_[depth];
-      LaneData entry;
-      while (true) {
-        if (!lane->pop(entry).IsNull()) {
-          LPointer<Task> task;
-          task.shm_ = entry.p_;
-          task.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(entry.p_);
-          TaskState *exec =
-              RunTask(lane_info, task, lane_info.lane_id_, flushing);
-          if (!task->IsModuleComplete()) {
-            if (task->IsLongRunning()) {
-              pending_.GetLongRunning().push(
-                  PrivateTaskQueueEntry{task, &lane_info});
-            } else if (task->prio_ == TaskPrio::kLowLatency) {
-              pending_.GetLowLatency(task->task_node_.node_depth_).push(
-                  PrivateTaskQueueEntry{task, &lane_info});
-            } else {
-              pending_.GetHighLatency(task->task_node_.node_depth_).push(
-                  PrivateTaskQueueEntry{task, &lane_info});
-            }
-            ++pending;
-          } else {
-            EndTask(exec, task);
-          }
-        } else {
-          break;
-        }
-      }
+    Lane *&lane = lane_info.lane_;
+    LaneData entry;
+    while (!lane->pop(entry).IsNull()) {
+      LPointer<Task> task;
+      task.shm_ = entry.p_;
+      task.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(entry.p_);
+      pending_.push(PrivateTaskQueueEntry{task, &lane_info});
     }
-    return pending;
   }
 
   /** Run an iteration over a particular queue */
   HSHM_ALWAYS_INLINE
   void PollPending(bool flushing) {
-    // Poll low-latency tasks
-    for (int depth = HSHM_WORKER_MAX_TASK_DEPTH - 1; depth >= 0; --depth) {
-      PrivateTaskQueue &queue = pending_.GetLowLatency(depth);
-      PollPrivateQueue(queue, flushing);
-    }
-    // Poll high-latency tasks
-    for (int depth = HSHM_WORKER_MAX_TASK_DEPTH - 1; depth >= 0; --depth) {
-      PrivateTaskQueue &queue = pending_.GetHighLatency(depth);
-      PollPrivateQueue(queue, flushing);
-    }
-    // Poll long-running tasks
+    PollPrivateQueue(pending_.GetLowLatency(), flushing);
+    PollPrivateQueue(pending_.GetHighLatency(), flushing);
     PollPrivateQueue(pending_.GetLongRunning(), flushing);
   }
 
   /** Poll the set of tasks in the private queue */
-  void PollPrivateQueue(PrivateTaskQueue &queue, bool flushing) {
+  HSHM_ALWAYS_INLINE
+  size_t PollPrivateQueue(PrivateTaskQueue &queue, bool flushing) {
+    size_t work = 0;
     for (size_t i = queue.head_; i < queue.tail_; ++i) {
       PrivateTaskQueueEntry entry;
       queue.peek(i, entry);
       if (entry.task_.ptr_ != nullptr) {
-        TaskState *exec = RunTask(*entry.lane_info_,
-                                  entry.task_,
-                                  entry.lane_info_->lane_id_,
-                                  flushing);
-        if (entry.task_->IsModuleComplete()) {
-          EndTask(exec, entry.task_);
-          queue.erase(i);
-        }
+        RunTask(queue, entry, i,
+                *entry.lane_info_,
+                entry.task_,
+                entry.lane_info_->lane_id_,
+                flushing);
+        ++work;
       }
     }
+    return work;
   }
 
   /** Run a task */
-  TaskState* RunTask(WorkEntry &lane_info,
+  HSHM_ALWAYS_INLINE
+  TaskState* RunTask(PrivateTaskQueue &queue,
+                     PrivateTaskQueueEntry &entry,
+                     size_t queue_off,
+                     WorkEntry &lane_info,
                      LPointer<Task> task,
                      u32 lane_id,
                      bool flushing) {
@@ -624,6 +605,11 @@ class Worker {
       RemoveTaskGroup(task.ptr_, exec,
                       lane_id,
                       props.Any(HSHM_WORKER_IS_REMOTE));
+      EndTask(exec, task);
+      queue.erase(queue_off);
+    } else if (rctx.pending_on_) {
+      queue.erase(queue_off);
+      pending_.push_pending(entry);
     }
     return exec;
   }
@@ -738,14 +724,6 @@ class Worker {
     }
     // Jump to CoroutineEntry
     rctx.jmp_ = bctx::jump_fcontext(rctx.jmp_.fctx, task);
-    // Rebuild stack pointer if coroutine is not done
-    // NOTE(llogan): Not entirely sure if this is needed
-//    if (!task->IsStarted()) {
-//      rctx.jmp_.fctx = bctx::make_fcontext(
-//          (char *) rctx.stack_ptr_ + stack_size_,
-//          stack_size_, &Worker::CoroutineEntry);
-//      task->SetStarted();
-//    }
   }
 
   /** Run a coroutine */
@@ -755,8 +733,6 @@ class Worker {
     TaskState *&exec = rctx.exec_;
     rctx.jmp_ = t;
     exec->Run(task->method_, task, rctx);
-    // NOTE(llogan): Not entirely sure if this is needed
-    // task->UnsetStarted();
     task->Yield<TASK_YIELD_CO>();
   }
 
@@ -780,7 +756,7 @@ class Worker {
   }
 
   /** Check if two tasks can execute concurrently */
-  // HSHM_ALWAYS_INLINE
+  HSHM_ALWAYS_INLINE
   bool CheckTaskGroup(Task *task, TaskState *exec,
                       u32 lane_id,
                       TaskNode node, const bool &is_remote) {
@@ -850,6 +826,10 @@ class Worker {
   /** Free a task when it is no longer needed */
   HSHM_ALWAYS_INLINE
   void EndTask(TaskState *exec, LPointer<Task> &task) {
+    if (task->ctx_.pending_to_) {
+      Task *pending_to = (Task*)task->ctx_.pending_to_;
+      pending_.pop_pending(pending_to);
+    }
     if (exec && task->IsFireAndForget()) {
       exec->Del(task->method_, task.ptr_);
     } else {

@@ -258,12 +258,17 @@ struct RunContext {
   TaskLib *exec_;
   WorkPending *flush_;
   hshm::Timer timer_;
+  void *pending_on_;
+  void *pending_to_;
+  size_t pending_key_;
 
   /** Default constructor */
-  RunContext() {}
+  RunContext()
+  : pending_on_(nullptr), pending_to_(nullptr) {}
 
   /** Emplace constructor */
-  RunContext(u32 lane_id) : lane_id_(lane_id) {}
+  RunContext(u32 lane_id)
+  : lane_id_(lane_id), pending_on_(nullptr), pending_to_(nullptr) {}
 };
 
 /** A generic task base class */
@@ -447,8 +452,7 @@ struct Task : public hipc::ShmContainer {
       start_ = cur_time;
       return true;
     }
-    // return start_.GetNsecFromStart(cur_time) >= period_ns_;
-    return true;
+    return start_.GetNsecFromStart(cur_time) >= period_ns_;
   }
 
   /** Mark this task as having been run */
@@ -489,12 +493,11 @@ struct Task : public hipc::ShmContainer {
   /** Wait for task to complete */
   template<int THREAD_MODEL = 0>
   void Wait(Task *yield_task) {
+    if constexpr (THREAD_MODEL == TASK_YIELD_CO) {
+      yield_task->ctx_.pending_on_ = this;
+      ctx_.pending_to_ = yield_task;
+    }
     while (!IsComplete()) {
-//      for (int i = 0; i < 100000; ++i) {
-//        if (IsComplete()) {
-//          return;
-//        }
-//      }
       yield_task->Yield<THREAD_MODEL>();
     }
   }
