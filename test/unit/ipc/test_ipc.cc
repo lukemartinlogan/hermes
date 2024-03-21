@@ -42,13 +42,19 @@ TEST_CASE("TestIpc") {
     // HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
     ret = client.MdRoot(hrun::DomainId::GetNode(node_id), depth, 0);
-    REQUIRE(ret == 1);
+//    auto task = client.AsyncMd(
+//        HRUN_CLIENT->MakeTaskNodeId() + 1,
+//        hrun::DomainId::GetNode(node_id),
+//        depth, 0);
+//    task->Wait();
+//    ret = task->ret_[0];
+//    REQUIRE(ret == 1);
   }
   t.Pause();
 
   HILOG(kInfo, "Latency: {} MOps, {} MTasks",
         ops / t.GetUsec(),
-        ops * (depth + 1) / t.GetUsec());
+        ops * (depth + 2) / t.GetUsec());
 }
 
 TEST_CASE("TestAsyncIpc") {

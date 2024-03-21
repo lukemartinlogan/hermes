@@ -36,6 +36,8 @@ static inline pid_t GetLinuxTid() {
 namespace hrun {
 
 #define WORKER_CONTINUOUS_POLLING BIT_OPT(u32, 0)
+#define WORKER_LOW_LATENCY BIT_OPT(u32, 1)
+#define WORKER_HIGH_LATENCY BIT_OPT(u32, 2)
 
 /** Uniquely identify a queue lane */
 struct WorkEntry {
@@ -314,7 +316,6 @@ class Worker {
   PrivateTaskMultiQueue
       pending_;  /** Tasks pending to complete */
   hshm::Timepoint cur_time_;  /**< The current timepoint */
-  size_t work_;
 
  public:
   /**===============================================================
@@ -426,6 +427,26 @@ class Worker {
     return flags_.Any(WORKER_CONTINUOUS_POLLING);
   }
 
+  /** Check if continuously polling */
+  void SetHighLatency() {
+    flags_.SetBits(WORKER_HIGH_LATENCY);
+  }
+
+  /** Check if continuously polling */
+  bool IsHighLatency() {
+    return flags_.Any(WORKER_HIGH_LATENCY);
+  }
+
+  /** Check if continuously polling */
+  void SetLowLatency() {
+    flags_.SetBits(WORKER_LOW_LATENCY);
+  }
+
+  /** Check if continuously polling */
+  bool IsLowLatency() {
+    return flags_.Any(WORKER_LOW_LATENCY);
+  }
+
   /** Set the CPU affinity of this worker */
   void SetCpuAffinity(int cpu_id) {
     HILOG(kInfo, "Affining worker {} (pid={}) to {}", id_, pid_, cpu_id);
@@ -505,7 +526,6 @@ class Worker {
 
   /** Run a single iteration over all queues */
   void Run(bool flushing) {
-    work_ = 0;
     // Are there any queues pending scheduling
     if (poll_queues_.size() > 0) {
       _PollQueues();
@@ -661,9 +681,6 @@ class Worker {
     if (task->IsRunDisabled() ||
         !props.All(HSHM_WORKER_GROUP_AVAIL | HSHM_WORKER_SHOULD_RUN)) {
       return false;
-    }
-    if (!task->IsLongRunning()) {
-      work_ += 1;
     }
     // Flush tasks
     if (props.Any(HSHM_WORKER_IS_FLUSHING) && !task->IsFlush()) {

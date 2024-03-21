@@ -42,6 +42,7 @@ void WorkOrchestrator::ServerInit(ServerConfig *config, QueueManager &qm) {
     workers_.emplace_back(std::make_unique<Worker>(worker_id, cpu_id, xstream_));
     Worker &worker = *workers_.back();
     worker.EnableContinuousPolling();
+    worker.SetLowLatency();
     dworkers_.emplace_back(&worker);
   }
   // Spawn overlapped workers (oworkers)
@@ -50,6 +51,7 @@ void WorkOrchestrator::ServerInit(ServerConfig *config, QueueManager &qm) {
     workers_.emplace_back(std::make_unique<Worker>(worker_id, cpu_id, xstream_));
     Worker &worker = *workers_.back();
     worker.DisableContinuousPolling();
+    worker.SetHighLatency();
     oworkers_.emplace_back(&worker);
   }
   stop_runtime_ = false;
