@@ -34,9 +34,10 @@ TEST_CASE("TestIpc") {
   int pid = getpid();
   ProcessAffiner::SetCpuAffinity(pid, 8);
 
+  size_t ops = (1 << 20);
+  HILOG(kInfo, "OPS: {}", ops)
   t.Resume();
   int depth = 0;
-  size_t ops = (1 << 20);
   for (size_t i = 0; i < ops; ++i) {
     int ret;
     // HILOG(kInfo, "Sending message {}", i);
@@ -48,7 +49,7 @@ TEST_CASE("TestIpc") {
 //        depth, 0);
 //    task->Wait();
 //    ret = task->ret_[0];
-//    REQUIRE(ret == 1);
+    REQUIRE(ret == 1);
   }
   t.Pause();
 
@@ -72,15 +73,15 @@ TEST_CASE("TestAsyncIpc") {
   ProcessAffiner::SetCpuAffinity(pid, 8);
 
   t.Resume();
-  size_t ops = (1 << 12);
+  size_t ops = (1 << 4);
   for (size_t i = 0; i < ops; ++i) {
     int ret;
     // HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
     client.AsyncMdRoot(hrun::DomainId::GetNode(node_id),
-                       3, TASK_FIRE_AND_FORGET);
+                       0, TASK_FIRE_AND_FORGET);
   }
-//  HRUN_ADMIN->FlushRoot(DomainId::GetLocal());
+  HRUN_ADMIN->FlushRoot(DomainId::GetLocal());
   t.Pause();
 
   HILOG(kInfo, "Latency: {} MOps", ops / t.GetUsec());

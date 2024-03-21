@@ -349,7 +349,11 @@ class Client : public ConfigurationManager {
   /** Get the queue ID */
   HSHM_ALWAYS_INLINE
   QueueId GetQueueId(const TaskStateId &id) {
-    return HRUN_QM_CLIENT->admin_queue_id_;
+    if (id == HRUN_QM_CLIENT->process_queue_id_) {
+      return HRUN_QM_CLIENT->process_queue_id_;
+    } else {
+      return HRUN_QM_CLIENT->admin_queue_id_;
+    }
   }
 
   /** Get a queue by its ID */

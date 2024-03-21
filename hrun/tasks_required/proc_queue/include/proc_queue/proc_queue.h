@@ -23,7 +23,7 @@ class Client : public TaskLibClient {
   /** Default constructor */
   Client() {
     id_ = TaskStateId(HRUN_QM_CLIENT->process_queue_id_);
-    queue_id_ = HRUN_QM_CLIENT->admin_queue_id_;
+    queue_id_ = HRUN_QM_CLIENT->process_queue_id_;
   }
 
   /** Destructor */

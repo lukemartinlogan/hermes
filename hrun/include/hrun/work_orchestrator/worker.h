@@ -177,13 +177,15 @@ class PrivateTaskQueue {
  public:
   std::vector<PrivateTaskQueueEntry> queue_;
   size_t size_, head_, tail_;
+  int id_;
 
  public:
-  void Init(size_t queue_depth) {
+  void Init(int id, size_t queue_depth) {
     queue_.resize(queue_depth);
     size_ = 0;
     tail_ = 0;
     head_ = 0;
+    id_ = id;
   }
 
   HSHM_ALWAYS_INLINE
@@ -237,51 +239,90 @@ class PrivateTaskQueue {
 
 class PrivateTaskMultiQueue {
  public:
-  PrivateTaskQueue low_lat_;
-  PrivateTaskQueue high_lat_;
-  PrivateTaskQueue long_running_;
-  PrivateTaskQueue pending_;
+  inline static const int ROOT = 0;
+  inline static const int LOW_LAT = 1;
+  inline static const int HIGH_LAT = 2;
+  inline static const int LONG_RUNNING = 3;
+  inline static const int PENDING = 4;
+  inline static const int NUM_QUEUES = 5;
 
  public:
-  void Init(size_t queue_depth) {
-    low_lat_.Init(queue_depth);
-    high_lat_.Init(queue_depth);
-    long_running_.Init(queue_depth);
-    pending_.Init(queue_depth);
+  size_t root_count_;
+  size_t max_root_count_;
+  PrivateTaskQueue queues_[NUM_QUEUES];
+
+ public:
+  void Init(size_t pqdepth, size_t qdepth, size_t max_lanes) {
+    queues_[ROOT].Init(ROOT, 4 * max_lanes * pqdepth);
+    queues_[LOW_LAT].Init(LOW_LAT, max_lanes * qdepth);
+    queues_[HIGH_LAT].Init(HIGH_LAT, max_lanes * qdepth);
+    queues_[LONG_RUNNING].Init(LONG_RUNNING, max_lanes * qdepth);
+    queues_[PENDING].Init(PENDING, PENDING * max_lanes * qdepth);
+    root_count_ = 0;
+    max_root_count_ = max_lanes * pqdepth;
   }
 
-  PrivateTaskQueue& GetLowLatency() {
-    return low_lat_;
+  PrivateTaskQueue& GetRoot() {
+    return queues_[ROOT];
   }
 
-  PrivateTaskQueue& GetHighLatency() {
-    return high_lat_;
+  PrivateTaskQueue& GetLowLat() {
+    return queues_[LOW_LAT];
+  }
+
+  PrivateTaskQueue& GetHighLat() {
+    return queues_[HIGH_LAT];
   }
 
   PrivateTaskQueue& GetLongRunning() {
-    return long_running_;
+    return queues_[LONG_RUNNING];
   }
 
-  void push(const PrivateTaskQueueEntry &entry) {
+  PrivateTaskQueue& GetPending() {
+    return queues_[PENDING];
+  }
+
+  template<bool WAS_PENDING=false>
+  bool push(const PrivateTaskQueueEntry &entry) {
     Task *task = entry.task_.ptr_;
-    if (task->IsLongRunning()) {
-      GetLongRunning().push(entry);
+    if (task->task_node_.node_depth_ == 0) {
+      if constexpr (WAS_PENDING) {
+        if (root_count_ == max_root_count_) {
+          return false;
+        }
+      }
+      bool ret = GetRoot().push(entry);
+      if constexpr (WAS_PENDING) {
+        root_count_ += ret;
+      }
+      return ret;
+    } if (task->IsLongRunning()) {
+      return GetLongRunning().push(entry);
     } else if (task->prio_ == TaskPrio::kLowLatency) {
-      GetLowLatency().push(entry);
+      return GetLowLat().push(entry);
     } else {
-      GetHighLatency().push(entry);
+      return GetHighLat().push(entry);
     }
   }
 
-  void push_pending(const PrivateTaskQueueEntry &entry) {
-    pending_.push(entry, entry.task_->ctx_.pending_key_);
+  void erase(int queue_id, size_t off) {
+    if (queue_id == ROOT) {
+      --root_count_;
+    }
+    queues_[queue_id].erase(off);
+  }
+
+  void push_pending(int queue_id, size_t off) {
+    PrivateTaskQueueEntry entry;
+    queues_[queue_id].pop(off, entry);
+    bool ret = GetPending().push(entry, entry.task_->ctx_.pending_key_);
   }
 
   void pop_pending(Task *pending_to) {
     PrivateTaskQueueEntry entry;
-    pending_.pop(pending_to->ctx_.pending_key_, entry);
+    GetPending().pop(pending_to->ctx_.pending_key_, entry);
     pending_to->ctx_.pending_on_ = nullptr;
-    push(entry);
+    push<true>(entry);
   }
 };
 
@@ -340,7 +381,7 @@ class Worker {
     }
     // MAX_DEPTH * [LOW_LAT, LONG_LAT]
     config::QueueManagerInfo &qm = HRUN_QM_RUNTIME->config_->queue_manager_;
-    pending_.Init(qm.queue_depth_);
+    pending_.Init(qm.proc_queue_depth_, qm.queue_depth_, qm.max_lanes_);
     cur_time_.Now();
 
     // Spawn threads
@@ -536,19 +577,20 @@ class Worker {
     }
     // Process tasks in the pending queues
     for (size_t i = 0; i < (1 << 18); ++i) {
-      IngestLanes();
-      PollPrivateQueue(pending_.GetLowLatency(), flushing);
+      IngestLanes(flushing);
+      PollPrivateQueue(pending_.GetLowLat(), flushing);
     }
-    PollPrivateQueue(pending_.GetHighLatency(), flushing);
+    PollPrivateQueue(pending_.GetHighLat(), flushing);
     PollPrivateQueue(pending_.GetLongRunning(), flushing);
   }
 
   /** Ingest all lanes */
   HSHM_ALWAYS_INLINE
-  void IngestLanes() {
+  void IngestLanes(bool flushing) {
     for (WorkEntry &work_entry : work_queue_) {
       IngestLane(work_entry);
     }
+    PollPrivateQueue(pending_.GetRoot(), flushing);
   }
 
   /** Ingest a lane */
@@ -556,12 +598,19 @@ class Worker {
   void IngestLane(WorkEntry &lane_info) {
     // Ingest tasks from the ingress queues
     Lane *&lane = lane_info.lane_;
-    LaneData entry;
-    while (!lane->pop(entry).IsNull()) {
+    LaneData *entry;
+    while (true) {
+      if (lane->peek(entry).IsNull()) {
+        break;
+      }
       LPointer<Task> task;
-      task.shm_ = entry.p_;
-      task.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(entry.p_);
-      pending_.push(PrivateTaskQueueEntry{task, &lane_info});
+      task.shm_ = entry->p_;
+      task.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
+      if (pending_.push(PrivateTaskQueueEntry{task, &lane_info})) {
+        lane->pop();
+      } else {
+        break;
+      }
     }
   }
 
@@ -573,7 +622,7 @@ class Worker {
       PrivateTaskQueueEntry entry;
       queue.peek(i, entry);
       if (entry.task_.ptr_ != nullptr) {
-        RunTask(queue, entry, i,
+        RunTask(queue, i,
                 *entry.lane_info_,
                 entry.task_,
                 entry.lane_info_->lane_id_,
@@ -587,7 +636,6 @@ class Worker {
   /** Run a task */
   HSHM_ALWAYS_INLINE
   TaskState* RunTask(PrivateTaskQueue &queue,
-                     PrivateTaskQueueEntry &entry,
                      size_t queue_off,
                      WorkEntry &lane_info,
                      LPointer<Task> task,
@@ -621,10 +669,9 @@ class Worker {
                       lane_id,
                       props.Any(HSHM_WORKER_IS_REMOTE));
       EndTask(exec, task);
-      queue.erase(queue_off);
+      pending_.erase(queue.id_, queue_off);
     } else if (rctx.pending_on_) {
-      queue.erase(queue_off);
-      pending_.push_pending(entry);
+      pending_.push_pending(queue.id_, queue_off);
     }
     return exec;
   }
@@ -669,7 +716,7 @@ class Worker {
     }
     return props;
   }
-  
+
   /** Run an arbitrary task */
   HSHM_ALWAYS_INLINE
   bool ExecTask(WorkEntry &lane_info,

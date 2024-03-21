@@ -29,7 +29,6 @@ struct QueueManagerShm {
 class QueueManager {
  public:
   hipc::vector<MultiQueue> *queue_map_;   /**< Queues which directly interact with tasks states */
-  MultiQueue *admin_queue_;  /**< The queue used to submit administrative requests */
   u32 node_id_;             /**< The ID of the node this QueueManager is on */
   QueueId admin_queue_id_;     /**< The queue used to submit administrative requests */
   QueueId process_queue_id_;     /**< ID of process queue task */
@@ -49,7 +48,7 @@ class QueueManager {
    * TODO(llogan): Maybe make a local hashtable to map id -> ticket?
    * */
   HSHM_ALWAYS_INLINE MultiQueue* GetQueue(const QueueId &id) {
-    return admin_queue_;
+    return &(*queue_map_)[id.unique_];
   }
 };
 
