@@ -63,9 +63,9 @@ class QueueManagerRuntime : public QueueManager {
     });
     queue->flags_.SetBits(QUEUE_READY);
     queue = CreateQueue(process_queue_id_, {
-        {TaskPrio::kAdmin, 1, 1, qm.queue_depth_, QUEUE_UNORDERED},
-        {TaskPrio::kLowLatency, qm.max_lanes_, qm.max_lanes_, qm.queue_depth_, QUEUE_LOW_LATENCY},
-        {TaskPrio::kHighLatency, qm.max_lanes_, qm.max_lanes_, qm.queue_depth_,
+        {TaskPrio::kAdmin, 1, 1, qm.proc_queue_depth_, QUEUE_UNORDERED},
+        {TaskPrio::kLowLatency, qm.max_lanes_, qm.max_lanes_, qm.proc_queue_depth_, QUEUE_LOW_LATENCY},
+        {TaskPrio::kHighLatency, qm.max_lanes_, qm.max_lanes_, qm.proc_queue_depth_,
          QUEUE_TETHERED, TaskPrio::kLowLatency},
     });
     queue->flags_.SetBits(QUEUE_READY);

@@ -227,10 +227,8 @@ class PrivateTaskQueue {
 
   HSHM_ALWAYS_INLINE
   void _correct_head() {
-    for (size_t i = head_; head_ < tail_; ++i) {
-      if (queue_[i % queue_.size()].task_.ptr_ == nullptr) {
-        head_ = i;
-      } else {
+    for (; head_ < tail_; ++head_) {
+      if (queue_[head_ % queue_.size()].task_.ptr_) {
         break;
       }
     }
@@ -253,7 +251,7 @@ class PrivateTaskMultiQueue {
 
  public:
   void Init(size_t pqdepth, size_t qdepth, size_t max_lanes) {
-    queues_[ROOT].Init(ROOT, 4 * max_lanes * pqdepth);
+    queues_[ROOT].Init(ROOT, max_lanes * qdepth);
     queues_[LOW_LAT].Init(LOW_LAT, max_lanes * qdepth);
     queues_[HIGH_LAT].Init(HIGH_LAT, max_lanes * qdepth);
     queues_[LONG_RUNNING].Init(LONG_RUNNING, max_lanes * qdepth);
@@ -286,13 +284,13 @@ class PrivateTaskMultiQueue {
   bool push(const PrivateTaskQueueEntry &entry) {
     Task *task = entry.task_.ptr_;
     if (task->task_node_.node_depth_ == 0) {
-      if constexpr (WAS_PENDING) {
+      if constexpr (!WAS_PENDING) {
         if (root_count_ == max_root_count_) {
           return false;
         }
       }
       bool ret = GetRoot().push(entry);
-      if constexpr (WAS_PENDING) {
+      if constexpr (!WAS_PENDING) {
         root_count_ += ret;
       }
       return ret;
@@ -336,7 +334,8 @@ class Worker {
   int affinity_;        /**< The worker CPU affinity */
   u32 numa_node_;       // TODO(llogan): track NUMA affinity
   ABT_xstream xstream_;
-  std::vector<WorkEntry> work_queue_;  /**< The set of queues to poll */
+  std::vector<WorkEntry> work_proc_queue_;  /**< The set of queues to poll */
+  std::vector<WorkEntry> work_inter_queue_;  /**< The set of queues to poll */
   /**< A set of queues to begin polling in a worker */
   hshm::spsc_queue<std::vector<WorkEntry>> poll_queues_;
   /**< A set of queues to stop polling in a worker */
@@ -416,10 +415,15 @@ class Worker {
     while (!poll_queues_.pop(work_queue).IsNull()) {
       for (const WorkEntry &entry : work_queue) {
         // HILOG(kDebug, "Scheduled queue {} (lane {})", entry.queue_->id_, entry.lane_);
-        work_queue_.emplace_back(entry);
+        if (entry.queue_->id_ == HRUN_QM_RUNTIME->process_queue_id_) {
+          work_proc_queue_.emplace_back(entry);
+        } else {
+          work_inter_queue_.emplace_back(entry);
+        }
       }
     }
-    HILOG(kInfo, "Worker {} has {} lanes", id_, work_queue_.size())
+    HILOG(kInfo, "Worker {} has {} lanes", id_,
+          work_proc_queue_.size() + work_inter_queue_.size())
   }
 
   /**
@@ -432,13 +436,6 @@ class Worker {
 
   /** Actually relinquish the queues from within the worker */
   void _RelinquishQueues() {
-    std::vector<WorkEntry> work_queue;
-    while (!poll_queues_.pop(work_queue).IsNull()) {
-      for (auto &entry : work_queue) {
-        work_queue_.erase(std::find(work_queue_.begin(),
-                                    work_queue_.end(), entry));
-      }
-    }
   }
 
   /** Check if worker is still stealing queues */
@@ -576,29 +573,46 @@ class Worker {
       _RelinquishQueues();
     }
     // Process tasks in the pending queues
-    for (size_t i = 0; i < (1 << 18); ++i) {
-      IngestLanes(flushing);
-      PollPrivateQueue(pending_.GetLowLat(), flushing);
+    IngestProcLanes(flushing);
+    PollPrivateQueue(pending_.GetRoot(), flushing);
+    for (size_t i = 0; i < 256; ++i) {
+      IngestInterLanes(flushing);
+      if (!PollPrivateQueue(pending_.GetLowLat(), flushing)) {
+        break;
+      }
     }
     PollPrivateQueue(pending_.GetHighLat(), flushing);
     PollPrivateQueue(pending_.GetLongRunning(), flushing);
-  }
-
-  /** Ingest all lanes */
-  HSHM_ALWAYS_INLINE
-  void IngestLanes(bool flushing) {
-    for (WorkEntry &work_entry : work_queue_) {
-      IngestLane(work_entry);
-    }
     PollPrivateQueue(pending_.GetRoot(), flushing);
   }
 
+
+  /** Ingest all process lanes */
+  HSHM_ALWAYS_INLINE
+  void IngestProcLanes(bool flushing) {
+    for (WorkEntry &work_entry : work_proc_queue_) {
+      IngestLane<0>(work_entry);
+    }
+  }
+  /** Ingest all intermediate lanes */
+  HSHM_ALWAYS_INLINE
+  void IngestInterLanes(bool flushing) {
+    for (WorkEntry &work_entry : work_inter_queue_) {
+      IngestLane<1>(work_entry);
+    }
+  }
+
   /** Ingest a lane */
+  template<int TYPE>
   HSHM_ALWAYS_INLINE
   void IngestLane(WorkEntry &lane_info) {
     // Ingest tasks from the ingress queues
     Lane *&lane = lane_info.lane_;
     LaneData *entry;
+//    if (lane->GetSize()) {
+//      HILOG(kInfo, "Lane {} of type {} has {} entries",
+//            lane->id_, TYPE, lane->GetSize());
+//    }
     while (true) {
       if (lane->peek(entry).IsNull()) {
         break;
@@ -618,6 +632,9 @@ class Worker {
   HSHM_ALWAYS_INLINE
   size_t PollPrivateQueue(PrivateTaskQueue &queue, bool flushing) {
     size_t work = 0;
+//    if (queue.size_ && queue.id_ < 3) {
+//      HILOG(kInfo, "Queue {} has size {}", queue.id_, queue.size_);
+//    }
     for (size_t i = queue.head_; i < queue.tail_; ++i) {
       PrivateTaskQueueEntry entry;
       queue.peek(i, entry);
@@ -668,8 +685,8 @@ class Worker {
       RemoveTaskGroup(task.ptr_, exec,
                       lane_id,
                       props.Any(HSHM_WORKER_IS_REMOTE));
-      EndTask(exec, task);
       pending_.erase(queue.id_, queue_off);
+      EndTask(exec, task);
     } else if (rctx.pending_on_) {
       pending_.push_pending(queue.id_, queue_off);
     }

@@ -137,9 +137,10 @@ struct TypedPushTask : public Task, TaskFlags<TF_LOCAL> {
   /** Create group */
   HSHM_ALWAYS_INLINE
   u32 GetGroup(hshm::charbuf &group) {
-    group.resize(sizeof(u32));
-    memcpy(group.data(), &lane_hash_, sizeof(u32));
-    return 0;
+//    group.resize(sizeof(u32));
+//    memcpy(group.data(), &lane_hash_, sizeof(u32));
+//    return 0;
+    return TASK_UNORDERED;
   }
 
   /** Get the task address */
