@@ -235,8 +235,8 @@ class TaskPrio {
   TASK_PRIO_T kAdmin = 0;              /**< Admin task lane */
   TASK_PRIO_T kLowLatency = 1;         /**< Low latency task lane */
   TASK_PRIO_T kHighLatency = 2;        /**< High latency task lane */
-  TASK_PRIO_T kLongRunning = 2;        /**< Long-running task lane */
-  TASK_PRIO_T kLongRunningTether = 2;  /**< Tethered to low latency workers */
+  TASK_PRIO_T kLongRunning = 3;        /**< Long-running task lane */
+  TASK_PRIO_T kLongRunningTether = 3;  /**< Tethered to low latency workers */
 };
 
 /** Used to indicate the amount of work remaining to do when flushing */
@@ -381,7 +381,7 @@ struct Task : public hipc::ShmContainer {
   }
 
   /** Set this task as started */
-  HSHM_ALWAYS_INLINE void UnsetStarted() {
+  void UnsetStarted() {
     task_flags_.UnsetBits(TASK_HAS_STARTED);
   }
 
@@ -500,8 +500,8 @@ struct Task : public hipc::ShmContainer {
                   THREAD_MODEL == TASK_YIELD_NOCO ||
                   THREAD_MODEL == TASK_YIELD_EMPTY) {
       if (parent_task &&
-          !parent_task->IsFireAndForget() &&
-          !parent_task->IsLongRunning()) {
+          !IsFireAndForget() &&
+          !IsLongRunning()) {
         ctx_.pending_to_ = parent_task;
         parent_task->SetBlocked();
       }

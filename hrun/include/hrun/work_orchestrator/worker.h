@@ -312,10 +312,6 @@ class PrivateTaskMultiQueue {
     }
   }
 
-  void repush(int queue_id, const PrivateTaskQueueEntry &entry) {
-    queues_[queue_id].push(entry);
-  }
-
   void erase(int queue_id, size_t off) {
     if (queue_id == ROOT) {
       --root_count_;
@@ -327,13 +323,6 @@ class PrivateTaskMultiQueue {
     PrivateTaskQueueEntry entry;
     queues_[queue_id].pop(off, entry);
     GetPending().push(entry, entry.task_->ctx_.pending_key_);
-  }
-
-  // Push the stalled task into the pending queue
-  // The task we are waiting for stores a back pointer to the stalled task
-  void push_pending(PrivateTaskQueueEntry &entry) {
-    Task *pending = (Task*)entry.task_.ptr_;
-    GetPending().push(entry, pending->ctx_.pending_key_);
   }
 
   void signal_complete(PrivateTaskMultiQueue &worker_pending,
@@ -601,6 +590,7 @@ class Worker {
         Yield();
       }
     }
+    HILOG(kInfo, "Orchestrator is dying");
     Run(true);
   }
 
@@ -725,11 +715,6 @@ class Worker {
     ExecTask(lane_info, task.ptr_, rctx, exec, props);
     // Cleanup allocations
     if (task->IsModuleComplete()) {
-      if (task->IsCoroutine() &&
-          !props.Any(HSHM_WORKER_IS_REMOTE) &&
-          !task->IsLaneAll()) {
-        FreeStack(rctx.stack_ptr_);
-      }
       RemoveTaskGroup(task.ptr_, exec,
                       lane_id,
                       props.Any(HSHM_WORKER_IS_REMOTE));
@@ -848,6 +833,9 @@ class Worker {
     }
     // Jump to CoroutineEntry
     rctx.jmp_ = bctx::jump_fcontext(rctx.jmp_.fctx, task);
+    if (!task->IsStarted()) {
+      FreeStack(rctx.stack_ptr_);
+    }
   }
 
   /** Run a coroutine */
@@ -857,6 +845,7 @@ class Worker {
     TaskState *&exec = rctx.exec_;
     rctx.jmp_ = t;
     exec->Run(task->method_, task, rctx);
+    task->UnsetStarted();
     task->Yield<TASK_YIELD_CO>();
   }
 

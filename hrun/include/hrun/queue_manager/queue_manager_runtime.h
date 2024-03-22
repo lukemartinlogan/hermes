@@ -59,6 +59,8 @@ class QueueManagerRuntime : public QueueManager {
         {TaskPrio::kAdmin, 1, 1, qm.queue_depth_, QUEUE_UNORDERED},
         {TaskPrio::kLowLatency, qm.max_lanes_, qm.max_lanes_, qm.queue_depth_, QUEUE_LOW_LATENCY},
         {TaskPrio::kHighLatency, qm.max_lanes_, qm.max_lanes_, qm.queue_depth_,
+         0, TaskPrio::kLowLatency},
+        {TaskPrio::kLongRunningTether, qm.max_lanes_, qm.max_lanes_, qm.queue_depth_,
          QUEUE_TETHERED, TaskPrio::kLowLatency},
     });
     queue->flags_.SetBits(QUEUE_READY);
@@ -66,6 +68,8 @@ class QueueManagerRuntime : public QueueManager {
         {TaskPrio::kAdmin, 1, 1, qm.proc_queue_depth_, QUEUE_UNORDERED},
         {TaskPrio::kLowLatency, qm.max_lanes_, qm.max_lanes_, qm.proc_queue_depth_, QUEUE_LOW_LATENCY},
         {TaskPrio::kHighLatency, qm.max_lanes_, qm.max_lanes_, qm.proc_queue_depth_,
+         0, TaskPrio::kLowLatency},
+        {TaskPrio::kLongRunningTether, qm.max_lanes_, qm.max_lanes_, qm.proc_queue_depth_,
          QUEUE_TETHERED, TaskPrio::kLowLatency},
     });
     queue->flags_.SetBits(QUEUE_READY);
