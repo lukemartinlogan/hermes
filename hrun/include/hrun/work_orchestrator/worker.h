@@ -326,18 +326,35 @@ class PrivateTaskMultiQueue {
   void push_pending(int queue_id, size_t off) {
     PrivateTaskQueueEntry entry;
     queues_[queue_id].pop(off, entry);
-    bool ret = GetPending().push(entry, entry.task_->ctx_.pending_key_);
+    GetPending().push(entry, entry.task_->ctx_.pending_key_);
   }
 
-  void push_pending(int queue_id, PrivateTaskQueueEntry &entry) {
-    Task *pending = (Task*)entry.task_->ctx_.pending_;
+  // Push the stalled task into the pending queue
+  // The task we are waiting for stores a back pointer to the stalled task
+  void push_pending(PrivateTaskQueueEntry &entry) {
+    Task *pending = (Task*)entry.task_.ptr_;
     GetPending().push(entry, pending->ctx_.pending_key_);
   }
 
-  void pop_pending(Task *pending) {
+  void signal_complete(PrivateTaskMultiQueue &worker_pending,
+                       LPointer<Task> &done_task) {
+    worker_pending.GetCompletion().emplace(done_task);
+  }
+
+  bool process_complete() {
+    LPointer<Task> done_task;
+    if (GetCompletion().pop(done_task).IsNull()) {
+      return false;
+    }
     PrivateTaskQueueEntry entry;
+    Task *pending = (Task*)done_task->ctx_.pending_;
     GetPending().pop(pending->ctx_.pending_key_, entry);
+    if (entry.task_.ptr_ == nullptr) {
+      return true;
+
+    }
     push<true>(entry);
+    return true;
   }
 };
 
@@ -419,6 +436,13 @@ class Worker {
     // TODO(llogan): implement reserve for group
     group_.resize(512);
     group_.resize(0);
+  }
+
+  /** Get the pending queue for a worker */
+  PrivateTaskMultiQueue& GetPendingQueue(Task *task) {
+    PrivateTaskMultiQueue &pending =
+        HRUN_WORK_ORCHESTRATOR->workers_[task->ctx_.worker_id_]->pending_;
+    return pending;
   }
 
   /** Tell worker to poll a set of queues */
@@ -603,7 +627,6 @@ class Worker {
     PollPrivateQueue(pending_.GetRoot(), flushing);
   }
 
-
   /** Ingest all process lanes */
   HSHM_ALWAYS_INLINE
   void IngestProcLanes(bool flushing) {
@@ -611,6 +634,7 @@ class Worker {
       IngestLane<0>(work_entry);
     }
   }
+
   /** Ingest all intermediate lanes */
   HSHM_ALWAYS_INLINE
   void IngestInterLanes(bool flushing) {
@@ -645,6 +669,11 @@ class Worker {
     }
   }
 
+  /** Process completion events */
+  void ProcessCompletions() {
+    while (pending_.process_complete());
+  }
+
   /** Poll the set of tasks in the private queue */
   HSHM_ALWAYS_INLINE
   size_t PollPrivateQueue(PrivateTaskQueue &queue, bool flushing) {
@@ -662,6 +691,7 @@ class Worker {
         ++work;
       }
     }
+    ProcessCompletions();
     return work;
   }
 
@@ -683,6 +713,7 @@ class Worker {
     }
     // Pack runtime context
     RunContext &rctx = task->ctx_;
+    rctx.worker_id_ = id_;
     rctx.flush_ = &flush_;
     rctx.exec_ = exec;
     // Get task properties
@@ -705,7 +736,7 @@ class Worker {
       EndTask(exec, task);
     } else if (rctx.pending_) {
       // pending_.push_pending(queue.id_, queue_off);
-      pending_.push_pending(queue.id_, entry);
+      pending_.push_pending(entry);
     } else {
       pending_.repush(queue.id_, entry);
     }
@@ -923,7 +954,8 @@ class Worker {
   void EndTask(TaskState *exec, LPointer<Task> &task) {
     if (task->ctx_.pending_) {
       Task *pending_to = (Task*)task->ctx_.pending_;
-      pending_.pop_pending(pending_to);
+      pending_.signal_complete(GetPendingQueue(pending_to),
+                               task);
     }
     if (exec && task->IsFireAndForget()) {
       exec->Del(task->method_, task.ptr_);

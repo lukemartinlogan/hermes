@@ -255,6 +255,7 @@ struct WorkPending {
 
 /** Context passed to the Run method of a task */
 struct RunContext {
+  u32 worker_id_;         /**< The worker id of the task */
   u32 lane_id_;           /**< The lane id of the task */
   bctx::transfer_t jmp_;  /**< Stack info for coroutines */
   void *stack_ptr_;       /**< Stack pointer (coroutine) */
@@ -265,11 +266,11 @@ struct RunContext {
   size_t pending_key_;
 
   /** Default constructor */
-  RunContext() {}
+  RunContext() : pending_(nullptr) {}
 
   /** Emplace constructor */
   RunContext(u32 lane_id)
-  : lane_id_(lane_id) {}
+  : lane_id_(lane_id), pending_(nullptr) {}
 };
 
 /** A generic task base class */
@@ -483,7 +484,9 @@ struct Task : public hipc::ShmContainer {
     if constexpr (THREAD_MODEL == TASK_YIELD_CO ||
                   THREAD_MODEL == TASK_YIELD_NOCO ||
                   THREAD_MODEL == TASK_YIELD_EMPTY) {
-      if (yield_task && !yield_task->IsFireAndForget()) {
+      if (yield_task &&
+          !yield_task->IsFireAndForget() &&
+          !yield_task->IsLongRunning()) {
         yield_task->ctx_.pending_ = this;
         ctx_.pending_ = yield_task;
       }
