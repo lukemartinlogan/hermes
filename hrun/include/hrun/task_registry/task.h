@@ -196,6 +196,8 @@ static inline std::ostream &operator<<(std::ostream &os, const TaskNode &obj) {
 #define TF_LOCAL BIT_OPT(u32, 5)
 /** This task supports monitoring of all sub-methods */
 #define TF_MONITOR BIT_OPT(u32, 6)
+/** This task has a CompareGroup function */
+#define TF_CMPGRP BIT_OPT(u32, 7)
 
 /** All tasks inherit this to easily check if a class is a task using SFINAE */
 class IsTask {};
@@ -224,6 +226,7 @@ struct TaskFlags : public IsTask {
   TASK_FLAG_T SRL_SYM_END = FLAGS & TF_SRL_SYM_END;
   TASK_FLAG_T REPLICA = FLAGS & TF_REPLICA;
   TASK_FLAG_T MONITOR = FLAGS & TF_MONITOR;
+  TASK_FLAG_T CMPGRP = FLAGS & TF_CMPGRP;
 };
 
 /** The type of a compile-time task flag */

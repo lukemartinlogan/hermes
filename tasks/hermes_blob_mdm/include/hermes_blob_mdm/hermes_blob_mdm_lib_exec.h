@@ -1026,5 +1026,91 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
   }
   return -1;
 }
+/** Check if two tasks apart of the same group must block */
+bool CompareGroup(u32 method, Task *task1, Task *task2) override {
+  switch (method) {
+    case Method::kConstruct: {
+      return hrun::CALL_CMPGRP<ConstructTask>(
+        reinterpret_cast<ConstructTask*>(task1), task2);
+    }
+    case Method::kDestruct: {
+      return hrun::CALL_CMPGRP<DestructTask>(
+        reinterpret_cast<DestructTask*>(task1), task2);
+    }
+    case Method::kPutBlob: {
+      return hrun::CALL_CMPGRP<PutBlobTask>(
+        reinterpret_cast<PutBlobTask*>(task1), task2);
+    }
+    case Method::kGetBlob: {
+      return hrun::CALL_CMPGRP<GetBlobTask>(
+        reinterpret_cast<GetBlobTask*>(task1), task2);
+    }
+    case Method::kTruncateBlob: {
+      return hrun::CALL_CMPGRP<TruncateBlobTask>(
+        reinterpret_cast<TruncateBlobTask*>(task1), task2);
+    }
+    case Method::kDestroyBlob: {
+      return hrun::CALL_CMPGRP<DestroyBlobTask>(
+        reinterpret_cast<DestroyBlobTask*>(task1), task2);
+    }
+    case Method::kTagBlob: {
+      return hrun::CALL_CMPGRP<TagBlobTask>(
+        reinterpret_cast<TagBlobTask*>(task1), task2);
+    }
+    case Method::kBlobHasTag: {
+      return hrun::CALL_CMPGRP<BlobHasTagTask>(
+        reinterpret_cast<BlobHasTagTask*>(task1), task2);
+    }
+    case Method::kGetBlobId: {
+      return hrun::CALL_CMPGRP<GetBlobIdTask>(
+        reinterpret_cast<GetBlobIdTask*>(task1), task2);
+    }
+    case Method::kGetOrCreateBlobId: {
+      return hrun::CALL_CMPGRP<GetOrCreateBlobIdTask>(
+        reinterpret_cast<GetOrCreateBlobIdTask*>(task1), task2);
+    }
+    case Method::kGetBlobName: {
+      return hrun::CALL_CMPGRP<GetBlobNameTask>(
+        reinterpret_cast<GetBlobNameTask*>(task1), task2);
+    }
+    case Method::kGetBlobSize: {
+      return hrun::CALL_CMPGRP<GetBlobSizeTask>(
+        reinterpret_cast<GetBlobSizeTask*>(task1), task2);
+    }
+    case Method::kGetBlobScore: {
+      return hrun::CALL_CMPGRP<GetBlobScoreTask>(
+        reinterpret_cast<GetBlobScoreTask*>(task1), task2);
+    }
+    case Method::kGetBlobBuffers: {
+      return hrun::CALL_CMPGRP<GetBlobBuffersTask>(
+        reinterpret_cast<GetBlobBuffersTask*>(task1), task2);
+    }
+    case Method::kRenameBlob: {
+      return hrun::CALL_CMPGRP<RenameBlobTask>(
+        reinterpret_cast<RenameBlobTask*>(task1), task2);
+    }
+    case Method::kReorganizeBlob: {
+      return hrun::CALL_CMPGRP<ReorganizeBlobTask>(
+        reinterpret_cast<ReorganizeBlobTask*>(task1), task2);
+    }
+    case Method::kSetBucketMdm: {
+      return hrun::CALL_CMPGRP<SetBucketMdmTask>(
+        reinterpret_cast<SetBucketMdmTask*>(task1), task2);
+    }
+    case Method::kFlushData: {
+      return hrun::CALL_CMPGRP<FlushDataTask>(
+        reinterpret_cast<FlushDataTask*>(task1), task2);
+    }
+    case Method::kPollBlobMetadata: {
+      return hrun::CALL_CMPGRP<PollBlobMetadataTask>(
+        reinterpret_cast<PollBlobMetadataTask*>(task1), task2);
+    }
+    case Method::kPollTargetMetadata: {
+      return hrun::CALL_CMPGRP<PollTargetMetadataTask>(
+        reinterpret_cast<PollTargetMetadataTask*>(task1), task2);
+    }
+  }
+  return false;
+}
 
 #endif  // HRUN_HERMES_BLOB_MDM_METHODS_H_

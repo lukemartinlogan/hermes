@@ -402,5 +402,39 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
   }
   return -1;
 }
+/** Check if two tasks apart of the same group must block */
+bool CompareGroup(u32 method, Task *task1, Task *task2) override {
+  switch (method) {
+    case Method::kConstruct: {
+      return hrun::CALL_CMPGRP<ConstructTask>(
+        reinterpret_cast<ConstructTask*>(task1), task2);
+    }
+    case Method::kDestruct: {
+      return hrun::CALL_CMPGRP<DestructTask>(
+        reinterpret_cast<DestructTask*>(task1), task2);
+    }
+    case Method::kRegisterStager: {
+      return hrun::CALL_CMPGRP<RegisterStagerTask>(
+        reinterpret_cast<RegisterStagerTask*>(task1), task2);
+    }
+    case Method::kUnregisterStager: {
+      return hrun::CALL_CMPGRP<UnregisterStagerTask>(
+        reinterpret_cast<UnregisterStagerTask*>(task1), task2);
+    }
+    case Method::kStageIn: {
+      return hrun::CALL_CMPGRP<StageInTask>(
+        reinterpret_cast<StageInTask*>(task1), task2);
+    }
+    case Method::kStageOut: {
+      return hrun::CALL_CMPGRP<StageOutTask>(
+        reinterpret_cast<StageOutTask*>(task1), task2);
+    }
+    case Method::kUpdateSize: {
+      return hrun::CALL_CMPGRP<UpdateSizeTask>(
+        reinterpret_cast<UpdateSizeTask*>(task1), task2);
+    }
+  }
+  return false;
+}
 
 #endif  // HRUN_DATA_STAGER_METHODS_H_

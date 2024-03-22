@@ -503,6 +503,19 @@ constexpr inline void CALL_REPLICA_END(TaskT *task) {
   }
 }
 
+/**
+ * Compare two tasks belonging to the same group.
+ * Returns true if the tasks can be executed concurrently.
+ * */
+template<typename TaskT>
+constexpr inline bool CALL_CMPGRP(TaskT *task1, Task *task2) {
+  if constexpr(TaskT::CMPGRP) {
+    return task1->CompareGroup(task2);
+  } else {
+    return false;
+  }
+}
+
 }  // namespace hrun
 
 static inline bool TRANSPARENT_HRUN() {

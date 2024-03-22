@@ -452,8 +452,6 @@ class Worker {
         }
       }
     }
-    HILOG(kInfo, "Worker {} has {} lanes", id_,
-          work_proc_queue_.size() + work_inter_queue_.size())
   }
 
   /**

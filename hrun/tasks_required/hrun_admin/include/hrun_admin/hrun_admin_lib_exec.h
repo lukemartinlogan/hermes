@@ -546,5 +546,51 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
   }
   return -1;
 }
+/** Check if two tasks apart of the same group must block */
+bool CompareGroup(u32 method, Task *task1, Task *task2) override {
+  switch (method) {
+    case Method::kCreateTaskState: {
+      return hrun::CALL_CMPGRP<CreateTaskStateTask>(
+        reinterpret_cast<CreateTaskStateTask*>(task1), task2);
+    }
+    case Method::kDestroyTaskState: {
+      return hrun::CALL_CMPGRP<DestroyTaskStateTask>(
+        reinterpret_cast<DestroyTaskStateTask*>(task1), task2);
+    }
+    case Method::kRegisterTaskLib: {
+      return hrun::CALL_CMPGRP<RegisterTaskLibTask>(
+        reinterpret_cast<RegisterTaskLibTask*>(task1), task2);
+    }
+    case Method::kDestroyTaskLib: {
+      return hrun::CALL_CMPGRP<DestroyTaskLibTask>(
+        reinterpret_cast<DestroyTaskLibTask*>(task1), task2);
+    }
+    case Method::kGetOrCreateTaskStateId: {
+      return hrun::CALL_CMPGRP<GetOrCreateTaskStateIdTask>(
+        reinterpret_cast<GetOrCreateTaskStateIdTask*>(task1), task2);
+    }
+    case Method::kGetTaskStateId: {
+      return hrun::CALL_CMPGRP<GetTaskStateIdTask>(
+        reinterpret_cast<GetTaskStateIdTask*>(task1), task2);
+    }
+    case Method::kStopRuntime: {
+      return hrun::CALL_CMPGRP<StopRuntimeTask>(
+        reinterpret_cast<StopRuntimeTask*>(task1), task2);
+    }
+    case Method::kSetWorkOrchQueuePolicy: {
+      return hrun::CALL_CMPGRP<SetWorkOrchQueuePolicyTask>(
+        reinterpret_cast<SetWorkOrchQueuePolicyTask*>(task1), task2);
+    }
+    case Method::kSetWorkOrchProcPolicy: {
+      return hrun::CALL_CMPGRP<SetWorkOrchProcPolicyTask>(
+        reinterpret_cast<SetWorkOrchProcPolicyTask*>(task1), task2);
+    }
+    case Method::kFlush: {
+      return hrun::CALL_CMPGRP<FlushTask>(
+        reinterpret_cast<FlushTask*>(task1), task2);
+    }
+  }
+  return false;
+}
 
 #endif  // HRUN_HRUN_ADMIN_METHODS_H_

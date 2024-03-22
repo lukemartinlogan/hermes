@@ -258,5 +258,27 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
   }
   return -1;
 }
+/** Check if two tasks apart of the same group must block */
+bool CompareGroup(u32 method, Task *task1, Task *task2) override {
+  switch (method) {
+    case Method::kConstruct: {
+      return hrun::CALL_CMPGRP<ConstructTask>(
+        reinterpret_cast<ConstructTask*>(task1), task2);
+    }
+    case Method::kDestruct: {
+      return hrun::CALL_CMPGRP<DestructTask>(
+        reinterpret_cast<DestructTask*>(task1), task2);
+    }
+    case Method::kPush: {
+      return hrun::CALL_CMPGRP<PushTask>(
+        reinterpret_cast<PushTask*>(task1), task2);
+    }
+    case Method::kDup: {
+      return hrun::CALL_CMPGRP<DupTask>(
+        reinterpret_cast<DupTask*>(task1), task2);
+    }
+  }
+  return false;
+}
 
 #endif  // HRUN_REMOTE_QUEUE_METHODS_H_

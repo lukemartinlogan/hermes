@@ -91,6 +91,9 @@ class TaskLib {
 
   /** Deserialize a task when returning from remote queue */
   virtual u32 GetGroup(u32 method, Task *task, hshm::charbuf &buf) = 0;
+
+  /** Check if two tasks apart of the same group can be executed concurrently */
+  virtual bool CompareGroup(u32 method, Task *task1, Task *task2) = 0;
 };
 
 /** Represents a TaskLib in action */

@@ -450,5 +450,43 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
   }
   return -1;
 }
+/** Check if two tasks apart of the same group must block */
+bool CompareGroup(u32 method, Task *task1, Task *task2) override {
+  switch (method) {
+    case Method::kConstruct: {
+      return hrun::CALL_CMPGRP<ConstructTask>(
+        reinterpret_cast<ConstructTask*>(task1), task2);
+    }
+    case Method::kDestruct: {
+      return hrun::CALL_CMPGRP<DestructTask>(
+        reinterpret_cast<DestructTask*>(task1), task2);
+    }
+    case Method::kWrite: {
+      return hrun::CALL_CMPGRP<WriteTask>(
+        reinterpret_cast<WriteTask*>(task1), task2);
+    }
+    case Method::kRead: {
+      return hrun::CALL_CMPGRP<ReadTask>(
+        reinterpret_cast<ReadTask*>(task1), task2);
+    }
+    case Method::kAllocate: {
+      return hrun::CALL_CMPGRP<AllocateTask>(
+        reinterpret_cast<AllocateTask*>(task1), task2);
+    }
+    case Method::kFree: {
+      return hrun::CALL_CMPGRP<FreeTask>(
+        reinterpret_cast<FreeTask*>(task1), task2);
+    }
+    case Method::kStatBdev: {
+      return hrun::CALL_CMPGRP<StatBdevTask>(
+        reinterpret_cast<StatBdevTask*>(task1), task2);
+    }
+    case Method::kUpdateScore: {
+      return hrun::CALL_CMPGRP<UpdateScoreTask>(
+        reinterpret_cast<UpdateScoreTask*>(task1), task2);
+    }
+  }
+  return false;
+}
 
 #endif  // HRUN_BDEV_METHODS_H_

@@ -882,5 +882,79 @@ u32 GetGroup(u32 method, Task *task, hshm::charbuf &group) override {
   }
   return -1;
 }
+/** Check if two tasks apart of the same group must block */
+bool CompareGroup(u32 method, Task *task1, Task *task2) override {
+  switch (method) {
+    case Method::kConstruct: {
+      return hrun::CALL_CMPGRP<ConstructTask>(
+        reinterpret_cast<ConstructTask*>(task1), task2);
+    }
+    case Method::kDestruct: {
+      return hrun::CALL_CMPGRP<DestructTask>(
+        reinterpret_cast<DestructTask*>(task1), task2);
+    }
+    case Method::kGetOrCreateTag: {
+      return hrun::CALL_CMPGRP<GetOrCreateTagTask>(
+        reinterpret_cast<GetOrCreateTagTask*>(task1), task2);
+    }
+    case Method::kGetTagId: {
+      return hrun::CALL_CMPGRP<GetTagIdTask>(
+        reinterpret_cast<GetTagIdTask*>(task1), task2);
+    }
+    case Method::kGetTagName: {
+      return hrun::CALL_CMPGRP<GetTagNameTask>(
+        reinterpret_cast<GetTagNameTask*>(task1), task2);
+    }
+    case Method::kRenameTag: {
+      return hrun::CALL_CMPGRP<RenameTagTask>(
+        reinterpret_cast<RenameTagTask*>(task1), task2);
+    }
+    case Method::kDestroyTag: {
+      return hrun::CALL_CMPGRP<DestroyTagTask>(
+        reinterpret_cast<DestroyTagTask*>(task1), task2);
+    }
+    case Method::kTagAddBlob: {
+      return hrun::CALL_CMPGRP<TagAddBlobTask>(
+        reinterpret_cast<TagAddBlobTask*>(task1), task2);
+    }
+    case Method::kTagRemoveBlob: {
+      return hrun::CALL_CMPGRP<TagRemoveBlobTask>(
+        reinterpret_cast<TagRemoveBlobTask*>(task1), task2);
+    }
+    case Method::kTagClearBlobs: {
+      return hrun::CALL_CMPGRP<TagClearBlobsTask>(
+        reinterpret_cast<TagClearBlobsTask*>(task1), task2);
+    }
+    case Method::kUpdateSize: {
+      return hrun::CALL_CMPGRP<UpdateSizeTask>(
+        reinterpret_cast<UpdateSizeTask*>(task1), task2);
+    }
+    case Method::kAppendBlobSchema: {
+      return hrun::CALL_CMPGRP<AppendBlobSchemaTask>(
+        reinterpret_cast<AppendBlobSchemaTask*>(task1), task2);
+    }
+    case Method::kAppendBlob: {
+      return hrun::CALL_CMPGRP<AppendBlobTask>(
+        reinterpret_cast<AppendBlobTask*>(task1), task2);
+    }
+    case Method::kGetSize: {
+      return hrun::CALL_CMPGRP<GetSizeTask>(
+        reinterpret_cast<GetSizeTask*>(task1), task2);
+    }
+    case Method::kSetBlobMdm: {
+      return hrun::CALL_CMPGRP<SetBlobMdmTask>(
+        reinterpret_cast<SetBlobMdmTask*>(task1), task2);
+    }
+    case Method::kGetContainedBlobIds: {
+      return hrun::CALL_CMPGRP<GetContainedBlobIdsTask>(
+        reinterpret_cast<GetContainedBlobIdsTask*>(task1), task2);
+    }
+    case Method::kPollTagMetadata: {
+      return hrun::CALL_CMPGRP<PollTagMetadataTask>(
+        reinterpret_cast<PollTagMetadataTask*>(task1), task2);
+    }
+  }
+  return false;
+}
 
 #endif  // HRUN_HERMES_BUCKET_MDM_METHODS_H_
