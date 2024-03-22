@@ -78,7 +78,7 @@ class Server : public TaskLib {
       targets_.emplace_back();
       bdev::Client &client = targets_.back();
       bdev::ConstructTask *create_task = client.AsyncCreate(
-          task->task_node_ + 1,
+          task, task->task_node_ + 1,
           DomainId::GetLocal(),
           "hermes_" + dev.dev_name_ + "/" + std::to_string(HRUN_CLIENT->node_id_),
           dev_type,
@@ -141,7 +141,7 @@ class Server : public TaskLib {
       stager_mdm_.Init(task->stager_mdm_, HRUN_ADMIN->queue_id_);
       op_mdm_.Init(task->op_mdm_, HRUN_ADMIN->queue_id_);
       flush_task_ = blob_mdm_.AsyncFlushData(
-          task->task_node_ + 1, HERMES_SERVER_CONF.borg_.flush_period_);
+          task, task->task_node_ + 1, HERMES_SERVER_CONF.borg_.flush_period_);
     }
     task->SetModuleComplete();
   }
@@ -214,7 +214,7 @@ class Server : public TaskLib {
         u32 bin_orig = hist.GetBin(blob_info.score_);
         u32 bin_new = hist.GetBin(score);
         if (bin_orig != bin_new) {
-          target.AsyncUpdateScore(task_node + 1,
+          target.AsyncUpdateScore(nullptr, task_node + 1,
                                   blob_info.score_, score);
         }
       }
@@ -275,7 +275,7 @@ class Server : public TaskLib {
       if (ShouldReorganize<true>(blob_info, new_score, task->task_node_)) {
         Context ctx;
         LPointer<ReorganizeBlobTask> reorg_task =
-            blob_mdm_.AsyncReorganizeBlob(task->task_node_ + 1,
+            blob_mdm_.AsyncReorganizeBlob(task, task->task_node_ + 1,
                                           blob_info.tag_id_,
                                           hshm::charbuf(""),
                                           blob_info.blob_id_,
@@ -297,7 +297,7 @@ class Server : public TaskLib {
         LPointer<char> data = HRUN_CLIENT->AllocateBufferServer<TASK_YIELD_CO>(
             blob_info.blob_size_, task);
         LPointer<GetBlobTask> get_blob =
-            blob_mdm_.AsyncGetBlob(task->task_node_ + 1,
+            blob_mdm_.AsyncGetBlob(task, task->task_node_ + 1,
                                    blob_info.tag_id_,
                                    blob_info.name_,
                                    blob_info.blob_id_,
@@ -306,7 +306,7 @@ class Server : public TaskLib {
         get_blob->Wait<TASK_YIELD_CO>(task);
         HRUN_CLIENT->DelTask(get_blob);
         flush_info.stage_task_ =
-          stager_mdm_.AsyncStageOut(task->task_node_ + 1,
+          stager_mdm_.AsyncStageOut(task, task->task_node_ + 1,
                                     blob_info.tag_id_,
                                     blob_info.name_,
                                     data.shm_, blob_info.blob_size_,
@@ -363,7 +363,7 @@ class Server : public TaskLib {
       HILOG(kDebug, "This file has not yet been flushed");
       blob_info.last_flush_ = 1;
       LPointer<data_stager::StageInTask> stage_task =
-          stager_mdm_.AsyncStageIn(task->task_node_ + 1,
+          stager_mdm_.AsyncStageIn(task, task->task_node_ + 1,
                                    task->tag_id_,
                                    blob_info.name_,
                                    task->score_, 0);
@@ -410,7 +410,7 @@ class Server : public TaskLib {
         SubPlacement &placement = schema.plcmnts_[sub_idx];
         TargetInfo &bdev = *target_map_[placement.tid_];
         LPointer<bdev::AllocateTask> alloc_task =
-            bdev.AsyncAllocate(task->task_node_ + 1,
+            bdev.AsyncAllocate(task, task->task_node_ + 1,
                                blob_info.score_,
                                placement.size_,
                                blob_info.buffers_);
@@ -456,7 +456,7 @@ class Server : public TaskLib {
         HILOG(kDebug, "Writing {} bytes at off {} from target {}", buf_size, tgt_off, buf.tid_)
         TargetInfo &target = *target_map_[buf.tid_];
         LPointer<bdev::WriteTask> write_task =
-            target.AsyncWrite(task->task_node_ + 1,
+            target.AsyncWrite(task, task->task_node_ + 1,
                               blob_buf + buf_off,
                               tgt_off, buf_size);
         write_tasks.emplace_back(write_task);
@@ -475,24 +475,24 @@ class Server : public TaskLib {
 
     // Update information
     if (task->flags_.Any(HERMES_SHOULD_STAGE)) {
-      stager_mdm_.AsyncUpdateSize(task->task_node_ + 1,
+      stager_mdm_.AsyncUpdateSize(task, task->task_node_ + 1,
                                    task->tag_id_,
                                    blob_info.name_,
                                    task->blob_off_,
                                    task->data_size_, 0);
     } else {
-      bkt_mdm_.AsyncUpdateSize(task->task_node_ + 1,
+      bkt_mdm_.AsyncUpdateSize(task, task->task_node_ + 1,
                                task->tag_id_,
                                bkt_size_diff,
                                UpdateSizeMode::kAdd);
     }
     if (task->flags_.Any(HERMES_BLOB_DID_CREATE)) {
-      bkt_mdm_.AsyncTagAddBlob(task->task_node_ + 1,
+      bkt_mdm_.AsyncTagAddBlob(task, task->task_node_ + 1,
                                task->tag_id_,
                                task->blob_id_);
     }
     if (task->flags_.Any(HERMES_HAS_DERIVED)) {
-      op_mdm_.AsyncRegisterData(task->task_node_ + 1,
+      op_mdm_.AsyncRegisterData(task, task->task_node_ + 1,
                                 task->tag_id_,
                                 task->blob_name_->str(),
                                 task->blob_id_,
@@ -513,7 +513,7 @@ class Server : public TaskLib {
     for (BufferInfo &buf : blob_info.buffers_) {
       TargetInfo &target = *target_map_[buf.tid_];
       std::vector<BufferInfo> buf_vec = {buf};
-      target.AsyncFree(task->task_node_ + 1,
+      target.AsyncFree(task, task->task_node_ + 1,
                        blob_info.score_,
                        std::move(buf_vec), true);
     }
@@ -537,7 +537,7 @@ class Server : public TaskLib {
       // TODO(llogan): Don't hardcore score = 1
       blob_info.last_flush_ = 1;
       LPointer<data_stager::StageInTask> stage_task =
-          stager_mdm_.AsyncStageIn(task->task_node_ + 1,
+          stager_mdm_.AsyncStageIn(task, task->task_node_ + 1,
                                    task->tag_id_,
                                    blob_info.name_,
                                    1, 0);
@@ -573,7 +573,7 @@ class Server : public TaskLib {
         }
         HILOG(kDebug, "Loading {} bytes at off {} from target {}", buf_size, tgt_off, buf.tid_)
         TargetInfo &target = *target_map_[buf.tid_];
-        bdev::ReadTask *read_task = target.AsyncRead(task->task_node_ + 1,
+        bdev::ReadTask *read_task = target.AsyncRead(task, task->task_node_ + 1,
                                                      blob_buf + buf_off,
                                                      tgt_off, buf_size).ptr_;
         read_tasks.emplace_back(read_task);
@@ -823,7 +823,7 @@ class Server : public TaskLib {
           TargetInfo &tgt_info = *target_map_[buf.tid_];
           std::vector<BufferInfo> buf_vec = {buf};
           bdev::FreeTask *free_task = tgt_info.AsyncFree(
-              task->task_node_ + 1, blob_info.score_,
+              task, task->task_node_ + 1, blob_info.score_,
               std::move(buf_vec), false).ptr_;
           task->free_tasks_->emplace_back(free_task);
         }
@@ -842,7 +842,7 @@ class Server : public TaskLib {
         BLOB_MAP_T &blob_map = blob_map_[rctx.lane_id_];
         BlobInfo &blob_info = blob_map[task->blob_id_];
         if (task->update_size_) {
-          bkt_mdm_.AsyncUpdateSize(task->task_node_ + 1,
+          bkt_mdm_.AsyncUpdateSize(task, task->task_node_ + 1,
                                    task->tag_id_,
                                    -(ssize_t) blob_info.blob_size_,
                                    UpdateSizeMode::kAdd);
@@ -888,7 +888,7 @@ class Server : public TaskLib {
         task->data_ = HRUN_CLIENT->AllocateBufferServer<TASK_YIELD_STD>(
             blob_info.blob_size_, task).shm_;
         task->data_size_ = blob_info.blob_size_;
-        task->get_task_ = blob_mdm_.AsyncGetBlob(task->task_node_ + 1,
+        task->get_task_ = blob_mdm_.AsyncGetBlob(task, task->task_node_ + 1,
                                                  task->tag_id_,
                                                  hshm::charbuf(""),
                                                  task->blob_id_,
@@ -907,7 +907,7 @@ class Server : public TaskLib {
       }
       case ReorganizeBlobPhase::kPut: {
         task->put_task_ = blob_mdm_.AsyncPutBlob(
-            task->task_node_ + 1,
+            task, task->task_node_ + 1,
             task->tag_id_, hshm::charbuf(""),
             task->blob_id_, 0,
             task->data_size_,

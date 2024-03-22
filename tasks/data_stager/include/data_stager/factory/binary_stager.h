@@ -94,7 +94,7 @@ class BinaryFileStager : public AbstractStager {
     hapi::Context ctx;
     ctx.flags_.SetBits(HERMES_SHOULD_STAGE);
     LPointer<blob_mdm::PutBlobTask> put_task =
-        blob_mdm.AsyncPutBlob(task->task_node_ + 1,
+        blob_mdm.AsyncPutBlob(task, task->task_node_ + 1,
                               task->bkt_id_,
                               hshm::to_charbuf(*task->blob_name_),
                               hermes::BlobId::GetNull(),
@@ -136,7 +136,7 @@ class BinaryFileStager : public AbstractStager {
     adapter::BlobPlacement p;
     std::string blob_name_str = task->blob_name_->str();
     p.DecodeBlobName(blob_name_str, page_size_);
-    bkt_mdm.AsyncUpdateSize(task->task_node_ + 1,
+    bkt_mdm.AsyncUpdateSize(task, task->task_node_ + 1,
                              task->bkt_id_,
                              p.bucket_off_ + task->blob_off_ + task->data_size_,
                              UpdateSizeMode::kCap);

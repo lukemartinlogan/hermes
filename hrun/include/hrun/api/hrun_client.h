@@ -381,80 +381,93 @@ class Client : public ConfigurationManager {
   template<typename ...Args>\
   auto CUSTOM##Root(Args&& ...args) {\
     TaskNode task_node = HRUN_CLIENT->MakeTaskNodeId();\
-    return CUSTOM(task_node, std::forward<Args>(args)...);\
+    return CUSTOM(nullptr, task_node, std::forward<Args>(args)...);\
   }
 
 /** Fill in common default parameters for task client wrapper function */
 #define HRUN_TASK_NODE_ADMIN_ROOT(CUSTOM)\
-  template<typename ...Args>\
-  hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Alloc(const TaskNode &task_node,\
+template<typename ...Args>\
+hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Alloc(const TaskNode &task_node,\
+                                                  Args&& ...args) {\
+  hipc::LPointer<CUSTOM##Task> task =\
+    HRUN_CLIENT->AllocateTask<CUSTOM##Task>();\
+  Async##CUSTOM##Construct(\
+    task.ptr_, task_node, std::forward<Args>(args)...);\
+  return task;\
+}\
+template<typename ...Args>\
+hipc::LPointer<CUSTOM##Task> Async##CUSTOM(Task *parent_task,\
+                                           const TaskNode &task_node,\
+                                           Args&& ...args) {\
+  hipc::LPointer<CUSTOM##Task> task =\
+    Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
+  task->Yield<TASK_YIELD_EMPTY>(parent_task);\
+  MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);\
+  queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+  return task;\
+}\
+template<typename ...Args>\
+hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Emplace(MultiQueue *queue,\
+                                                    const TaskNode &task_node,\
                                                     Args&& ...args) {\
-    hipc::LPointer<CUSTOM##Task> task = HRUN_CLIENT->AllocateTask<CUSTOM##Task>();\
-    Async##CUSTOM##Construct(task.ptr_, task_node, std::forward<Args>(args)...);\
-    return task;\
-  }\
-  template<typename ...Args>\
-  hipc::LPointer<CUSTOM##Task> Async##CUSTOM(const TaskNode &task_node, \
-                                             Args&& ...args) {\
-    hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
-    MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
-                   task.ptr_->task_node_.node_depth_, task.shm_);\
-    return task;\
-  }\
-  template<typename ...Args>\
-  hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Emplace(MultiQueue *queue,\
-                                                      const TaskNode &task_node,\
-                                                      Args&& ...args) {\
-    hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
-                   task.ptr_->task_node_.node_depth_, task.shm_);\
-    return task;\
-  }\
-  template<typename ...Args>\
-  hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Root(Args&& ...args) {\
-    TaskNode task_node = HRUN_CLIENT->MakeTaskNodeId();\
-    hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM(task_node + 1, std::forward<Args>(args)...);\
-    return task;\
-  }
+  hipc::LPointer<CUSTOM##Task> task =\
+    Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
+  queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+  return task;\
+}\
+template<typename ...Args>\
+hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Root(Args&& ...args) {\
+  TaskNode task_node = HRUN_CLIENT->MakeTaskNodeId();\
+  hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM(\
+  nullptr, task_node + 1, std::forward<Args>(args)...);\
+  return task;\
+}
 
 /** The default asynchronous method behavior */
 #define HRUN_TASK_NODE_PUSH_ROOT(CUSTOM)\
-  template<typename ...Args>\
-  hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Alloc(const TaskNode &task_node,\
-                                                    Args&& ...args) {\
-    hipc::LPointer<CUSTOM##Task> task = HRUN_CLIENT->AllocateTask<CUSTOM##Task>();\
-    Async##CUSTOM##Construct(task.ptr_, task_node, std::forward<Args>(args)...);\
-    return task;\
-  }\
-  template<typename ...Args>\
-  hipc::LPointer<CUSTOM##Task> Async##CUSTOM(const TaskNode &task_node, \
-                                             Args&& ...args) {\
-    hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
-    MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
-                   task.ptr_->task_node_.node_depth_,  task.shm_);\
-    return task;\
-  }\
-  template<typename ...Args>\
-  hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Emplace(MultiQueue *queue,\
-                                                      const TaskNode &task_node,\
-                                                      Args&& ...args) {\
-    hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
-    queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_,                   \
-                   task.ptr_->task_node_.node_depth_, task.shm_);\
-    return task;\
-  }\
-  template<typename ...Args>\
-  hipc::LPointer<hrunpq::TypedPushTask<CUSTOM##Task>> Async##CUSTOM##Root(Args&& ...args) {\
-    TaskNode task_node = HRUN_CLIENT->MakeTaskNodeId();\
-    hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(task_node + 1, std::forward<Args>(args)...);\
-    hipc::LPointer<hrunpq::TypedPushTask<CUSTOM##Task>> push_task =\
-      HRUN_PROCESS_QUEUE->AsyncPush<CUSTOM##Task>(task_node,\
-                                                     DomainId::GetLocal(),\
-                                                     task);\
-      return push_task;\
-  }
+template<typename ...Args>\
+hipc::LPointer<CUSTOM##Task> Async##CUSTOM##Alloc(const TaskNode &task_node,\
+                                                  Args&& ...args) {\
+  hipc::LPointer<CUSTOM##Task> task =\
+    HRUN_CLIENT->AllocateTask<CUSTOM##Task>();\
+  Async##CUSTOM##Construct(\
+    task.ptr_, task_node, std::forward<Args>(args)...);\
+  return task;\
+}\
+template<typename ...Args>\
+hipc::LPointer<CUSTOM##Task> Async##CUSTOM(Task *parent_task,\
+                                           const TaskNode &task_node,\
+                                           Args&& ...args) {\
+  hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(\
+    task_node, std::forward<Args>(args)...);\
+  task->Yield<TASK_YIELD_EMPTY>(parent_task);\
+  MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);\
+  queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+  return task;\
+}\
+template<typename ...Args>\
+hipc::LPointer<CUSTOM##Task>\
+Async##CUSTOM##Emplace(MultiQueue *queue,\
+                       const TaskNode &task_node,\
+                       Args&& ...args) {\
+  hipc::LPointer<CUSTOM##Task> task =\
+    Async##CUSTOM##Alloc(task_node, std::forward<Args>(args)...);\
+  queue->Emplace(task.ptr_->prio_, task.ptr_->lane_hash_, task.shm_);\
+  return task;\
+}\
+template<typename ...Args>\
+hipc::LPointer<hrunpq::TypedPushTask<CUSTOM##Task>>\
+Async##CUSTOM##Root(Args&& ...args) {\
+  TaskNode task_node = HRUN_CLIENT->MakeTaskNodeId();\
+  hipc::LPointer<CUSTOM##Task> task = Async##CUSTOM##Alloc(\
+    task_node + 1, std::forward<Args>(args)...);\
+  hipc::LPointer<hrunpq::TypedPushTask<CUSTOM##Task>> push_task =\
+    HRUN_PROCESS_QUEUE->AsyncPush<CUSTOM##Task>(task_node,\
+                                                DomainId::GetLocal(),\
+                                                task);\
+    return push_task;\
+}
+
 
 /** Call duplicate if applicable */
 template<typename TaskT>

@@ -40,7 +40,7 @@ class Server : public TaskLib {
     op_id_map_["min"] = 0;
     op_id_map_["max"] = 1;
     op_graphs_.resize(HRUN_QM_RUNTIME->max_lanes_);
-    run_task_ = client_.AsyncRunOp(task->task_node_ + 1);
+    run_task_ = client_.AsyncRunOp(task, task->task_node_ + 1);
     task->SetModuleComplete();
   }
   void MonitorConstruct(u32 mode, ConstructTask *task, RunContext &rctx) {
@@ -65,14 +65,14 @@ class Server : public TaskLib {
       // Spawn bucket ID task for each input
       for (OpBucketName &bkt_name : op.in_) {
         bkt_name.bkt_id_task_ =
-            bkt_mdm_.AsyncGetOrCreateTag(task->task_node_ + 1,
+            bkt_mdm_.AsyncGetOrCreateTag(task, task->task_node_ + 1,
                                          hshm::charbuf(bkt_name.url_),
                                          true,
                                          traits, 0, 0);
       }
       // Spawn bucket ID task for the output
       op.var_name_.bkt_id_task_ =
-          bkt_mdm_.AsyncGetOrCreateTag(task->task_node_ + 1,
+          bkt_mdm_.AsyncGetOrCreateTag(task, task->task_node_ + 1,
                                        hshm::charbuf(op.var_name_.url_),
                                        true,
                                        traits, 0, 0);
@@ -185,7 +185,7 @@ class Server : public TaskLib {
       LPointer<char> data_ptr =
           HRUN_CLIENT->AllocateBufferServer<TASK_YIELD_CO>(data.size_, task);
       LPointer<blob_mdm::GetBlobTask> in_task =
-          blob_mdm_.AsyncGetBlob(task->task_node_ + 1,
+          blob_mdm_.AsyncGetBlob(task, task->task_node_ + 1,
                                  data.bkt_id_,
                                  hshm::charbuf(""), data.blob_id_,
                                  data.off_, data.size_,
@@ -212,7 +212,7 @@ class Server : public TaskLib {
 
       // Store the minimum in Hermes
       std::string min_blob_name = data.blob_name_;
-      blob_mdm_.AsyncPutBlob(task->task_node_ + 1,
+      blob_mdm_.AsyncPutBlob(task, task->task_node_ + 1,
                              op.var_name_.bkt_id_,
                              hshm::charbuf(min_blob_name),
                              BlobId::GetNull(),

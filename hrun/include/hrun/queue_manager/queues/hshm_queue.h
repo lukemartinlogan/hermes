@@ -239,13 +239,13 @@ struct MultiQueueT<Hshm> : public hipc::ShmContainer {
 
   /** Emplace a SHM pointer to a task */
   HSHM_ALWAYS_INLINE
-  bool Emplace(u32 prio, u32 lane_hash, u32 depth,
+  bool Emplace(u32 prio, u32 lane_hash,
                hipc::Pointer &p, bool complete = false) {
-    return Emplace(prio, lane_hash, depth, LaneData(p, complete));
+    return Emplace(prio, lane_hash, LaneData(p, complete));
   }
 
   /** Emplace a SHM pointer to a task */
-  bool Emplace(u32 prio, u32 lane_hash, u32 depth, const LaneData &data) {
+  bool Emplace(u32 prio, u32 lane_hash, const LaneData &data) {
     if (IsEmplacePlugged()) {
       WaitForEmplacePlug();
     }

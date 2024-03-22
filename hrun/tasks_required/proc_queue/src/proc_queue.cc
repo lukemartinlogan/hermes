@@ -49,11 +49,9 @@ class Server : public TaskLib {
         }
         MultiQueue *real_queue = HRUN_CLIENT->GetQueue(
             QueueId(sub_run->task_state_));
-        task->ctx_.pending_on_ = sub_run;
-        sub_run->ctx_.pending_to_ = task;
+        sub_run->Yield<TASK_YIELD_NOCO>(task);
         bool ret = real_queue->Emplace(
-            sub_run->prio_, sub_run->lane_hash_,
-            sub_run->task_node_.node_depth_, task->sub_run_.shm_);
+            sub_run->prio_, sub_run->lane_hash_, task->sub_run_.shm_);
         if (ret) {
           task->phase_ = PushTaskPhase::kWaitSchedule;
         }

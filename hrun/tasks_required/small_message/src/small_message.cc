@@ -41,7 +41,9 @@ class Server : public TaskLib {
   void Md(MdTask *task, RunContext &rctx) {
     if (task->depth_ > 0) {
       LPointer<MdTask> depth_task =
-          client_.AsyncMd(task->task_node_ + 1, task->domain_id_,
+          client_.AsyncMd(task,
+                          task->task_node_ + 1,
+                          task->domain_id_,
                           task->depth_ - 1, 0);
       depth_task->Wait<TASK_YIELD_CO>(task);
       HRUN_CLIENT->DelTask(depth_task);

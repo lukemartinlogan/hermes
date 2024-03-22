@@ -40,7 +40,8 @@ class Client : public TaskLibClient {
 
   /** Async create task state */
   HSHM_ALWAYS_INLINE
-  LPointer<ConstructTask> AsyncCreate(const TaskNode &task_node,
+  LPointer<ConstructTask> AsyncCreate(Task *parent_task,
+                                      const TaskNode &task_node,
                                       const DomainId &domain_id,
                                       const std::string &state_name,
                                       const std::string &lib_name,
@@ -51,14 +52,15 @@ class Client : public TaskLibClient {
     QueueManagerInfo &qm = HRUN_CLIENT->server_config_.queue_manager_;
     std::vector<PriorityInfo> queue_info;
     return HRUN_ADMIN->AsyncCreateTaskState<ConstructTask>(
-        task_node, domain_id, state_name, lib_name, id_,
+        parent_task, task_node, domain_id, state_name, lib_name, id_,
         queue_info, dev_info);
   }
   void AsyncCreateComplete(ConstructTask *task) {
     if (task->IsModuleComplete()) {
       id_ = task->id_;
       Init(id_, HRUN_ADMIN->queue_id_);
-      monitor_task_ = AsyncStatBdev(task->task_node_ + 1, 100).ptr_;
+      monitor_task_ = AsyncStatBdev(
+          task, task->task_node_ + 1, 100).ptr_;
       HRUN_CLIENT->DelTask(task);
     }
   }

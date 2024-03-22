@@ -15,6 +15,7 @@
 
 #include "hrun/hrun_types.h"
 #include "hrun/network/local_serialize.h"
+#include <csetjmp>
 #include <thallium.hpp>
 
 namespace hrun {
@@ -70,7 +71,9 @@ class TaskLib;
 /** Used to indicate Yield to use */
 #define TASK_YIELD_STD 0
 #define TASK_YIELD_CO 1
-#define TASK_YIELD_ABT 2
+#define TASK_YIELD_NOCO 2
+#define TASK_YIELD_ABT 3
+#define TASK_YIELD_EMPTY 4
 
 /** The baseline set of tasks */
 struct TaskMethod {
@@ -253,22 +256,20 @@ struct WorkPending {
 /** Context passed to the Run method of a task */
 struct RunContext {
   u32 lane_id_;           /**< The lane id of the task */
-  bctx::transfer_t jmp_;  /**< Current execution state of the task (runtime) */
-  void *stack_ptr_;   /**< The pointer to the stack (runtime) */
+  bctx::transfer_t jmp_;  /**< Stack info for coroutines */
+  void *stack_ptr_;       /**< Stack pointer (coroutine) */
   TaskLib *exec_;
   WorkPending *flush_;
   hshm::Timer timer_;
-  void *pending_on_;
-  void *pending_to_;
+  void *pending_;
   size_t pending_key_;
 
   /** Default constructor */
-  RunContext()
-  : pending_on_(nullptr), pending_to_(nullptr) {}
+  RunContext() {}
 
   /** Emplace constructor */
   RunContext(u32 lane_id)
-  : lane_id_(lane_id), pending_on_(nullptr), pending_to_(nullptr) {}
+  : lane_id_(lane_id) {}
 };
 
 /** A generic task base class */
@@ -471,6 +472,23 @@ struct Task : public hipc::ShmContainer {
     } else if constexpr (THREAD_MODEL == TASK_YIELD_ABT) {
       ABT_thread_yield();
     }
+    // NOTE(llogan): TASK_YIELD_NOCO is not here because it shouldn't
+    // actually yield anything. Would longjmp be worthwhile here?
+  }
+
+  /** Yield a task to a different task */
+  template<int THREAD_MODEL = 0>
+  HSHM_ALWAYS_INLINE
+  void Yield(Task *yield_task) {
+    if constexpr (THREAD_MODEL == TASK_YIELD_CO ||
+                  THREAD_MODEL == TASK_YIELD_NOCO ||
+                  THREAD_MODEL == TASK_YIELD_EMPTY) {
+      if (yield_task && !yield_task->IsFireAndForget()) {
+        yield_task->ctx_.pending_ = this;
+        ctx_.pending_ = yield_task;
+      }
+    }
+    Yield<THREAD_MODEL>();
   }
 
   /** Wait for task to complete */
@@ -493,10 +511,6 @@ struct Task : public hipc::ShmContainer {
   /** Wait for task to complete */
   template<int THREAD_MODEL = 0>
   void Wait(Task *yield_task) {
-    if constexpr (THREAD_MODEL == TASK_YIELD_CO) {
-      yield_task->ctx_.pending_on_ = this;
-      ctx_.pending_to_ = yield_task;
-    }
     while (!IsComplete()) {
       yield_task->Yield<THREAD_MODEL>();
     }

@@ -248,6 +248,8 @@ class PrivateTaskMultiQueue {
   size_t root_count_;
   size_t max_root_count_;
   PrivateTaskQueue queues_[NUM_QUEUES];
+  hipc::uptr<mpsc_queue<LPointer<Task>>> complete_u_;
+  mpsc_queue<LPointer<Task>> *complete_;
 
  public:
   void Init(size_t pqdepth, size_t qdepth, size_t max_lanes) {
@@ -256,6 +258,9 @@ class PrivateTaskMultiQueue {
     queues_[HIGH_LAT].Init(HIGH_LAT, max_lanes * qdepth);
     queues_[LONG_RUNNING].Init(LONG_RUNNING, max_lanes * qdepth);
     queues_[PENDING].Init(PENDING, PENDING * max_lanes * qdepth);
+    complete_u_ = hipc::make_uptr<mpsc_queue<LPointer<Task>>>(
+        PENDING * max_lanes * qdepth);
+    complete_ = complete_u_.get();
     root_count_ = 0;
     max_root_count_ = max_lanes * pqdepth;
   }
@@ -278,6 +283,10 @@ class PrivateTaskMultiQueue {
 
   PrivateTaskQueue& GetPending() {
     return queues_[PENDING];
+  }
+
+  mpsc_queue<LPointer<Task>>& GetCompletion() {
+    return *complete_;
   }
 
   template<bool WAS_PENDING=false>
@@ -303,6 +312,10 @@ class PrivateTaskMultiQueue {
     }
   }
 
+  void repush(int queue_id, const PrivateTaskQueueEntry &entry) {
+    queues_[queue_id].push(entry);
+  }
+
   void erase(int queue_id, size_t off) {
     if (queue_id == ROOT) {
       --root_count_;
@@ -316,10 +329,14 @@ class PrivateTaskMultiQueue {
     bool ret = GetPending().push(entry, entry.task_->ctx_.pending_key_);
   }
 
-  void pop_pending(Task *pending_to) {
+  void push_pending(int queue_id, PrivateTaskQueueEntry &entry) {
+    Task *pending = (Task*)entry.task_->ctx_.pending_;
+    GetPending().push(entry, pending->ctx_.pending_key_);
+  }
+
+  void pop_pending(Task *pending) {
     PrivateTaskQueueEntry entry;
-    GetPending().pop(pending_to->ctx_.pending_key_, entry);
-    pending_to->ctx_.pending_on_ = nullptr;
+    GetPending().pop(pending->ctx_.pending_key_, entry);
     push<true>(entry);
   }
 };
@@ -632,14 +649,12 @@ class Worker {
   HSHM_ALWAYS_INLINE
   size_t PollPrivateQueue(PrivateTaskQueue &queue, bool flushing) {
     size_t work = 0;
-//    if (queue.size_ && queue.id_ < 3) {
-//      HILOG(kInfo, "Queue {} has size {}", queue.id_, queue.size_);
-//    }
-    for (size_t i = queue.head_; i < queue.tail_; ++i) {
+    size_t tail = queue.tail_;
+    for (size_t i = queue.head_; i < tail; ++i) {
       PrivateTaskQueueEntry entry;
-      queue.peek(i, entry);
+      queue.pop(i, entry);
       if (entry.task_.ptr_ != nullptr) {
-        RunTask(queue, i,
+        RunTask(queue, entry, i,
                 *entry.lane_info_,
                 entry.task_,
                 entry.lane_info_->lane_id_,
@@ -653,6 +668,7 @@ class Worker {
   /** Run a task */
   HSHM_ALWAYS_INLINE
   TaskState* RunTask(PrivateTaskQueue &queue,
+                     PrivateTaskQueueEntry &entry,
                      size_t queue_off,
                      WorkEntry &lane_info,
                      LPointer<Task> task,
@@ -685,10 +701,13 @@ class Worker {
       RemoveTaskGroup(task.ptr_, exec,
                       lane_id,
                       props.Any(HSHM_WORKER_IS_REMOTE));
-      pending_.erase(queue.id_, queue_off);
+      // pending_.erase(queue.id_, queue_off);
       EndTask(exec, task);
-    } else if (rctx.pending_on_) {
-      pending_.push_pending(queue.id_, queue_off);
+    } else if (rctx.pending_) {
+      // pending_.push_pending(queue.id_, queue_off);
+      pending_.push_pending(queue.id_, entry);
+    } else {
+      pending_.repush(queue.id_, entry);
     }
     return exec;
   }
@@ -902,8 +921,8 @@ class Worker {
   /** Free a task when it is no longer needed */
   HSHM_ALWAYS_INLINE
   void EndTask(TaskState *exec, LPointer<Task> &task) {
-    if (task->ctx_.pending_to_) {
-      Task *pending_to = (Task*)task->ctx_.pending_to_;
+    if (task->ctx_.pending_) {
+      Task *pending_to = (Task*)task->ctx_.pending_;
       pending_.pop_pending(pending_to);
     }
     if (exec && task->IsFireAndForget()) {

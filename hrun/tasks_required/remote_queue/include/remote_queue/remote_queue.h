@@ -26,7 +26,8 @@ class Client : public TaskLibClient {
 
   /** Async create a task state */
   HSHM_ALWAYS_INLINE
-  LPointer<ConstructTask> AsyncCreate(const TaskNode &task_node,
+  LPointer<ConstructTask> AsyncCreate(Task *parent_task,
+                                      const TaskNode &task_node,
                                       const DomainId &domain_id,
                                       const std::string &state_name,
                                       const TaskStateId &state_id) {
@@ -34,7 +35,7 @@ class Client : public TaskLibClient {
     QueueManagerInfo &qm = HRUN_CLIENT->server_config_.queue_manager_;
     std::vector<PriorityInfo> queue_info;
     return HRUN_ADMIN->AsyncCreateTaskState<ConstructTask>(
-        task_node, domain_id, state_name, id_, queue_info);
+        parent_task, task_node, domain_id, state_name, id_, queue_info);
   }
   HRUN_TASK_NODE_ROOT(AsyncCreate);
   template<typename ...Args>
@@ -75,7 +76,7 @@ class Client : public TaskLibClient {
         orig_task->task_node_ + 1, DomainId::GetLocal(), id_,
         domain_ids, orig_task, exec, orig_task->method_, xfer);
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);
-    queue->Emplace(push_task->prio_, 0,
+    queue->Emplace(push_task->prio_,
                    push_task->task_node_.node_depth_,
                    push_task.shm_);
   }
@@ -92,8 +93,7 @@ class Client : public TaskLibClient {
       task->UnsetFireAndForget();
       task->lane_hash_ = i;
       task->UnsetLaneAll();
-      orig_queue->Emplace(task->prio_, task->lane_hash_,
-                          task->task_node_.node_depth_, task.shm_);
+      orig_queue->Emplace(task->prio_, task->lane_hash_, task.shm_);
     }
 
     // Create duplicate task
@@ -102,8 +102,7 @@ class Client : public TaskLibClient {
         orig_task->task_node_ + 1, id_,
         orig_task, exec, orig_task->method_, dups);
     MultiQueue *queue = HRUN_CLIENT->GetQueue(queue_id_);
-    queue->Emplace(dup_task->prio_, 0,
-                   dup_task->task_node_.node_depth_,dup_task.shm_);
+    queue->Emplace(dup_task->prio_, 0, dup_task.shm_);
   }
 
   /** Spawn task to accept new connections */

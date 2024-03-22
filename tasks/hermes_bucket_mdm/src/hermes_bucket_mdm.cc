@@ -108,7 +108,7 @@ class Server : public TaskLib {
           append.blob_name_ = adapter::BlobPlacement::CreateBlobName(cur_page);
           append.data_size_ = update_size;
           append.blob_off_ = cur_page_off;
-          append.blob_id_task_ = blob_mdm_.AsyncGetOrCreateBlobId(task->task_node_ + 1,
+          append.blob_id_task_ = blob_mdm_.AsyncGetOrCreateBlobId(task, task->task_node_ + 1,
                                                                   task->tag_id_,
                                                                   append.blob_name_).ptr_;
           cur_size += update_size;
@@ -148,7 +148,7 @@ class Server : public TaskLib {
       case AppendBlobPhase::kGetBlobIds: {
         HILOG(kDebug, "(node {}) Appending {} bytes to bucket {} (task_node={})",
               HRUN_CLIENT->node_id_, task->data_size_, task->tag_id_, task->task_node_);
-        task->schema_ = bkt_mdm_.AsyncAppendBlobSchema(task->task_node_ + 1,
+        task->schema_ = bkt_mdm_.AsyncAppendBlobSchema(task, task->task_node_ + 1,
                                                        task->tag_id_,
                                                        task->data_size_,
                                                        task->page_size_).ptr_;
@@ -172,7 +172,7 @@ class Server : public TaskLib {
           if (tag_info.flags_.Any(HERMES_SHOULD_STAGE)) {
             ctx.flags_.SetBits(HERMES_SHOULD_STAGE);
           }
-          append.put_task_ = blob_mdm_.AsyncPutBlob(task->task_node_ + 1,
+          append.put_task_ = blob_mdm_.AsyncPutBlob(task, task->task_node_ + 1,
                                                     task->tag_id_,
                                                     append.blob_name_,
                                                     append.blob_id_,
@@ -238,7 +238,7 @@ class Server : public TaskLib {
       tag_info.owner_ = task->blob_owner_;
       tag_info.internal_size_ = task->backend_size_;
       if (task->flags_.Any(HERMES_SHOULD_STAGE)) {
-        stager_mdm_.AsyncRegisterStager(task->task_node_ + 1,
+        stager_mdm_.AsyncRegisterStager(task, task->task_node_ + 1,
                                         tag_id,
                                         hshm::charbuf(task->tag_name_->str()),
                                         hshm::charbuf(task->params_->str()));
@@ -318,11 +318,11 @@ class Server : public TaskLib {
         blob_tasks.reserve(tag.blobs_.size());
         for (BlobId &blob_id : tag.blobs_) {
           blob_mdm::DestroyBlobTask *blob_task =
-              blob_mdm_.AsyncDestroyBlob(task->task_node_ + 1,
+              blob_mdm_.AsyncDestroyBlob(task, task->task_node_ + 1,
                                          task->tag_id_, blob_id, false).ptr_;
           blob_tasks.emplace_back(blob_task);
         }
-        stager_mdm_.AsyncUnregisterStager(task->task_node_ + 1,
+        stager_mdm_.AsyncUnregisterStager(task, task->task_node_ + 1,
                                           task->tag_id_);
         HILOG(kDebug, "Destroying the tag: {}", tag.name_.str());
         task->phase_ = DestroyTagPhase::kWaitDestroyBlobs;
@@ -391,7 +391,7 @@ class Server : public TaskLib {
     TagInfo &tag = it->second;
     if (tag.owner_) {
       for (BlobId &blob_id : tag.blobs_) {
-        blob_mdm_.AsyncDestroyBlob(task->task_node_ + 1, task->tag_id_, blob_id);
+        blob_mdm_.AsyncDestroyBlob(task, task->task_node_ + 1, task->tag_id_, blob_id);
       }
     }
     tag.blobs_.clear();
