@@ -37,12 +37,13 @@ TEST_CASE("TestIpc") {
   size_t ops = (1 << 20);
   HILOG(kInfo, "OPS: {}", ops)
   t.Resume();
-  int depth = 0;
+  int depth = 5;
   for (size_t i = 0; i < ops; ++i) {
     int ret;
     // HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
-    ret = client.MdRoot(hrun::DomainId::GetNode(node_id), depth, 0);
+    ret = client.MdRoot(hrun::DomainId::GetNode(node_id),
+                        depth, 0);
 //    auto task = client.AsyncMd(
 //        HRUN_CLIENT->MakeTaskNodeId() + 1,
 //        hrun::DomainId::GetNode(node_id),
@@ -73,23 +74,26 @@ TEST_CASE("TestAsyncIpc") {
   ProcessAffiner::SetCpuAffinity(pid, 8);
 
   t.Resume();
+  int depth = 8;
   size_t ops = (1 << 20);
   for (size_t i = 0; i < ops; ++i) {
     int ret;
     // HILOG(kInfo, "Sending message {}", i);
     int node_id = 1 + ((rank + 1) % nprocs);
-//    client.AsyncMdRoot(hrun::DomainId::GetNode(node_id),
-//                       0, TASK_FIRE_AND_FORGET);
-    auto task = client.AsyncMd(
-        nullptr,
-        HRUN_CLIENT->MakeTaskNodeId() + 1,
-        hrun::DomainId::GetNode(node_id),
-        0, TASK_FIRE_AND_FORGET);
+    client.AsyncMdRoot(hrun::DomainId::GetNode(node_id),
+                       depth, TASK_FIRE_AND_FORGET);
+//    auto task = client.AsyncMd(
+//        nullptr,
+//        HRUN_CLIENT->MakeTaskNodeId() + 1,
+//        hrun::DomainId::GetNode(node_id),
+//        depth, TASK_FIRE_AND_FORGET);
   }
   HRUN_ADMIN->FlushRoot(DomainId::GetLocal());
   t.Pause();
 
-  HILOG(kInfo, "Latency: {} MOps", ops / t.GetUsec());
+  HILOG(kInfo, "Latency: {} MOps, {} MTasks",
+        ops / t.GetUsec(),
+        ops * (depth + 2) / t.GetUsec());
 }
 
 TEST_CASE("TestFlush") {

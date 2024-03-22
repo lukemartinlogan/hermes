@@ -262,15 +262,15 @@ struct RunContext {
   TaskLib *exec_;
   WorkPending *flush_;
   hshm::Timer timer_;
-  void *pending_;
+  void *pending_to_;
   size_t pending_key_;
 
   /** Default constructor */
-  RunContext() : pending_(nullptr) {}
+  RunContext() : pending_to_(nullptr) {}
 
   /** Emplace constructor */
   RunContext(u32 lane_id)
-  : lane_id_(lane_id), pending_(nullptr) {}
+  : lane_id_(lane_id), pending_to_(nullptr) {}
 };
 
 /** A generic task base class */
@@ -390,6 +390,21 @@ struct Task : public hipc::ShmContainer {
     return task_flags_.Any(TASK_HAS_STARTED);
   }
 
+  /** Set blocked */
+  HSHM_ALWAYS_INLINE void SetBlocked() {
+    task_flags_.SetBits(TASK_BLOCKED);
+  }
+
+  /** Unset blocked */
+  HSHM_ALWAYS_INLINE void UnsetBlocked() {
+    task_flags_.UnsetBits(TASK_BLOCKED);
+  }
+
+  /** Check if task is blocked */
+  HSHM_ALWAYS_INLINE bool IsBlocked() {
+    return task_flags_.Any(TASK_BLOCKED);
+  }
+
   /** Set this task as started */
   HSHM_ALWAYS_INLINE void UnsetLongRunning() {
     task_flags_.UnsetBits(TASK_LONG_RUNNING);
@@ -480,15 +495,15 @@ struct Task : public hipc::ShmContainer {
   /** Yield a task to a different task */
   template<int THREAD_MODEL = 0>
   HSHM_ALWAYS_INLINE
-  void Yield(Task *yield_task) {
+  void Yield(Task *parent_task) {
     if constexpr (THREAD_MODEL == TASK_YIELD_CO ||
                   THREAD_MODEL == TASK_YIELD_NOCO ||
                   THREAD_MODEL == TASK_YIELD_EMPTY) {
-      if (yield_task &&
-          !yield_task->IsFireAndForget() &&
-          !yield_task->IsLongRunning()) {
-        yield_task->ctx_.pending_ = this;
-        ctx_.pending_ = yield_task;
+      if (parent_task &&
+          !parent_task->IsFireAndForget() &&
+          !parent_task->IsLongRunning()) {
+        ctx_.pending_to_ = parent_task;
+        parent_task->SetBlocked();
       }
     }
     Yield<THREAD_MODEL>();

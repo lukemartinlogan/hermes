@@ -347,12 +347,12 @@ class PrivateTaskMultiQueue {
       return false;
     }
     PrivateTaskQueueEntry entry;
-    Task *pending = (Task*)done_task->ctx_.pending_;
-    GetPending().pop(pending->ctx_.pending_key_, entry);
-    if (entry.task_.ptr_ == nullptr) {
+    Task *pending = (Task*)done_task->ctx_.pending_to_;
+    if (!pending->IsBlocked()){
       return true;
-
     }
+    GetPending().pop(pending->ctx_.pending_key_, entry);
+    pending->UnsetBlocked();
     push<true>(entry);
     return true;
   }
@@ -566,7 +566,8 @@ class Worker {
     if(!stacks_.emplace(stack).IsNull()) {
       return;
     }
-    stacks_.Resize(stacks_.size() + num_stacks_);
+    stacks_.Resize(stacks_.size() * 2 + num_stacks_);
+    stacks_.emplace(stack);
   }
 
   /**===============================================================
@@ -681,7 +682,7 @@ class Worker {
     size_t tail = queue.tail_;
     for (size_t i = queue.head_; i < tail; ++i) {
       PrivateTaskQueueEntry entry;
-      queue.pop(i, entry);
+      queue.peek(i, entry);
       if (entry.task_.ptr_ != nullptr) {
         RunTask(queue, entry, i,
                 *entry.lane_info_,
@@ -732,13 +733,10 @@ class Worker {
       RemoveTaskGroup(task.ptr_, exec,
                       lane_id,
                       props.Any(HSHM_WORKER_IS_REMOTE));
-      // pending_.erase(queue.id_, queue_off);
+      pending_.erase(queue.id_, queue_off);
       EndTask(exec, task);
-    } else if (rctx.pending_) {
-      // pending_.push_pending(queue.id_, queue_off);
-      pending_.push_pending(entry);
-    } else {
-      pending_.repush(queue.id_, entry);
+    } else if (task->IsBlocked()) {
+      pending_.push_pending(queue.id_, queue_off);
     }
     return exec;
   }
@@ -841,7 +839,7 @@ class Worker {
       rctx.stack_ptr_ = AllocateStack();
       if (rctx.stack_ptr_ == nullptr) {
         HELOG(kFatal, "The stack pointer of size {} is NULL",
-              stack_size_, rctx.stack_ptr_);
+              stack_size_);
       }
       rctx.jmp_.fctx = bctx::make_fcontext(
           (char *) rctx.stack_ptr_ + stack_size_,
@@ -952,8 +950,8 @@ class Worker {
   /** Free a task when it is no longer needed */
   HSHM_ALWAYS_INLINE
   void EndTask(TaskState *exec, LPointer<Task> &task) {
-    if (task->ctx_.pending_) {
-      Task *pending_to = (Task*)task->ctx_.pending_;
+    if (task->ctx_.pending_to_) {
+      Task *pending_to = (Task*)task->ctx_.pending_to_;
       pending_.signal_complete(GetPendingQueue(pending_to),
                                task);
     }
