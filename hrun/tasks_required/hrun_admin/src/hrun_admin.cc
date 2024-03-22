@@ -183,14 +183,11 @@ class Server : public TaskLib {
           while (worker->flush_.flushing_) {
             std::atomic_thread_fence(
                 std::memory_order::memory_order_seq_cst);
-            HILOG(kInfo, "Worker {} has {} tasks", worker->id_, worker->flush_.count_);
             task->Yield<TASK_YIELD_CO>();
           }
-          HILOG(kInfo, "Worker {} has {} tasks", worker->id_, worker->flush_.count_);
           count += worker->flush_.count_;
         }
       }
-      HILOG(kInfo, "Overall count: {}", count);
       if (!count) {
         break;
       }
