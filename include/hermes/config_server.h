@@ -262,7 +262,8 @@ class ServerConfig : public BaseConfig {
       borg_.num_threads_ = yaml_conf["num_threads"].as<int>();
     }
     if (yaml_conf["flush_period"]) {
-      borg_.flush_period_ = yaml_conf["flush_period"].as<size_t>();
+      borg_.flush_period_ =
+          yaml_conf["flush_period"].as<size_t>() * 1000000;
     }
     if (yaml_conf["blob_reorg_period"]) {
       borg_.blob_reorg_period_ = yaml_conf["blob_reorg_period"].as<size_t>();

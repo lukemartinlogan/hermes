@@ -372,7 +372,6 @@ class Worker {
       state_map_;       /**< The set of task states */
   hshm::charbuf group_;  /**< The current group */
   WorkPending flush_;    /**< Info needed for flushing ops */
-  hshm::Timepoint now_;  /**< The current timepoint */
   hshm::spsc_queue<void*> stacks_;  /**< Cache of stacks for tasks */
   int num_stacks_ = 256;  /**< Number of stacks */
   int stack_size_ = KILOBYTES(64);
@@ -573,11 +572,17 @@ class Worker {
       MakeDedicated();
     }
     WorkOrchestrator *orchestrator = HRUN_WORK_ORCHESTRATOR;
-    now_.Now();
+    cur_time_.Now();
+    size_t work = 0;
     while (orchestrator->IsAlive()) {
       try {
         bool flushing = flush_.flushing_;
-        Run(flushing);
+        work += Run(flushing);
+        ++work;
+        if (work >= 10000) {
+          work = 0;
+          cur_time_.Now();
+        }
         if (flushing) {
           flush_.flushing_ = false;
         }
@@ -597,7 +602,7 @@ class Worker {
   }
 
   /** Run a single iteration over all queues */
-  void Run(bool flushing) {
+  size_t Run(bool flushing) {
     // Are there any queues pending scheduling
     if (poll_queues_.size() > 0) {
       _PollQueues();
@@ -607,12 +612,14 @@ class Worker {
       _RelinquishQueues();
     }
     // Process tasks in the pending queues
+    size_t work = 0;
     IngestProcLanes(flushing);
-    PollPrivateQueue(pending_.GetRoot(), flushing);
+    work += PollPrivateQueue(pending_.GetRoot(), flushing);
     IngestInterLanes(flushing);
-    PollPrivateQueue(pending_.GetLowLat(), flushing);
-    PollPrivateQueue(pending_.GetHighLat(), flushing);
+    work += PollPrivateQueue(pending_.GetLowLat(), flushing);
+    work += PollPrivateQueue(pending_.GetHighLat(), flushing);
     PollPrivateQueue(pending_.GetLongRunning(), flushing);
+    return work;
   }
 
   /** Ingest all process lanes */

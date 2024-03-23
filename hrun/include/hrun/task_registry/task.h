@@ -471,7 +471,11 @@ struct Task : public hipc::ShmContainer {
       start_ = cur_time;
       return true;
     }
-    return start_.GetNsecFromStart(cur_time) >= period_ns_;
+    bool should_start = start_.GetNsecFromStart(cur_time) >= period_ns_;
+    if (should_start) {
+      start_ = cur_time;
+    }
+    return should_start;
   }
 
   /** Mark this task as having been run */

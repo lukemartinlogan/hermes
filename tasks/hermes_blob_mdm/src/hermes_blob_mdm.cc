@@ -140,6 +140,8 @@ class Server : public TaskLib {
       bkt_mdm_.Init(task->bkt_mdm_, HRUN_ADMIN->queue_id_);
       stager_mdm_.Init(task->stager_mdm_, HRUN_ADMIN->queue_id_);
       op_mdm_.Init(task->op_mdm_, HRUN_ADMIN->queue_id_);
+      HILOG(kInfo, "Creating flush task with period {}",
+            HERMES_SERVER_CONF.borg_.flush_period_);
       flush_task_ = blob_mdm_.AsyncFlushData(
           task, task->task_node_ + 1, HERMES_SERVER_CONF.borg_.flush_period_);
     }
@@ -261,6 +263,8 @@ class Server : public TaskLib {
     size_t mod_count_;
   };
   void FlushData(FlushDataTask *task, RunContext &rctx) {
+    return;
+    HILOG(kInfo, "Flushing");
     hshm::Timepoint now;
     now.Now();
     // Get the blob info data structure
@@ -359,8 +363,6 @@ class Server : public TaskLib {
     blob_info.user_score_ = task->score_;
 
     // Stage Blob
-    hshm::Timer timer;
-    timer.Resume();
     if (task->flags_.Any(HERMES_SHOULD_STAGE) && blob_info.last_flush_ == 0) {
       HILOG(kDebug, "This file has not yet been flushed");
       blob_info.last_flush_ = 1;
@@ -382,8 +384,6 @@ class Server : public TaskLib {
       bkt_size_diff -= blob_info.blob_size_;
       PutBlobFreeBuffersPhase(blob_info, task, rctx);
     }
-    timer.Pause();
-    HILOG(kInfo, "It took {} us to perform stagein", timer.GetUsec());
 
     // Determine amount of additional buffering space needed
     size_t needed_space = task->blob_off_ + task->data_size_;
@@ -408,8 +408,6 @@ class Server : public TaskLib {
     }
 
     // Allocate blob buffers
-    timer.Reset();
-    timer.Resume();
     for (PlacementSchema &schema : schema_vec) {
       schema.plcmnts_.emplace_back(0, fallback_target_->id_);
       for (size_t sub_idx = 0; sub_idx < schema.plcmnts_.size(); ++sub_idx) {
@@ -430,8 +428,6 @@ class Server : public TaskLib {
         HRUN_CLIENT->DelTask(alloc_task);
       }
     }
-    timer.Pause();
-    HILOG(kInfo, "It took {} us to allocate buffers", timer.GetUsec());
 
     // Place blob in buffers
     std::vector<LPointer<bdev::WriteTask>> write_tasks;
@@ -472,14 +468,10 @@ class Server : public TaskLib {
     blob_info.max_blob_size_ = blob_off;
 
     // Wait for the placements to complete
-    timer.Reset();
-    timer.Resume();
     for (LPointer<bdev::WriteTask> &write_task : write_tasks) {
       write_task->Wait<TASK_YIELD_CO>(task);
       HRUN_CLIENT->DelTask(write_task);
     }
-    timer.Pause();
-    HILOG(kInfo, "It took {} us to wait for data tasks", timer.GetUsec());
 
     // Update information
     if (task->flags_.Any(HERMES_SHOULD_STAGE)) {

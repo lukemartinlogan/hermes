@@ -40,7 +40,7 @@ class TaskLib {
  public:
   TaskStateId id_;    /**< The unique name of a task state */
   QueueId queue_id_;  /**< The queue id of a task state */
-  std::string name_; /**< The unique semantic name of a task state */
+  std::string name_;  /**< The unique semantic name of a task state */
 
   /** Default constructor */
   TaskLib() : id_(TaskStateId::GetNull()) {}
