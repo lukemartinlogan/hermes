@@ -329,7 +329,7 @@ struct Task : public hipc::ShmContainer {
 
   /** Check if task is long running */
   HSHM_ALWAYS_INLINE bool IsLongRunning() {
-    return task_flags_.Any(TASK_LONG_RUNNING);
+    return task_flags_.All(TASK_LONG_RUNNING);
   }
 
   /** Check if task is unordered */

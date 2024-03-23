@@ -292,7 +292,9 @@ class PrivateTaskMultiQueue {
   template<bool WAS_PENDING=false>
   bool push(const PrivateTaskQueueEntry &entry) {
     Task *task = entry.task_.ptr_;
-    if (task->task_node_.node_depth_ == 0) {
+    if (task->IsLongRunning()) {
+      return GetLongRunning().push(entry);
+    } else if (task->task_node_.node_depth_ == 0) {
       if constexpr (!WAS_PENDING) {
         if (root_count_ == max_root_count_) {
           return false;
@@ -303,24 +305,6 @@ class PrivateTaskMultiQueue {
         root_count_ += ret;
       }
       return ret;
-    }
-
-    bool is_remote = task->domain_id_.IsRemote(
-        HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
-#ifdef HERMES_REMOTE_DEBUG
-    if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
-            !task->task_flags_.Any(TASK_REMOTE_DEBUG_MARK) &&
-            task->method_ != TaskMethod::kConstruct &&
-            HRUN_RUNTIME->remote_created_) {
-          is_remote = true;
-        }
-#endif
-    if (is_remote) {
-      task->SetRemote();
-    }
-
-    if (task->IsLongRunning()) {
-      return GetLongRunning().push(entry);
     } else if (task->prio_ == TaskPrio::kLowLatency) {
       return GetLowLat().push(entry);
     } else {
@@ -631,8 +615,15 @@ class Worker {
     size_t work = 0;
     IngestProcLanes(flushing);
     work += PollPrivateQueue(pending_.GetRoot(), flushing);
-    IngestInterLanes(flushing);
-    work += PollPrivateQueue(pending_.GetLowLat(), flushing);
+    for (size_t i = 0; i < 8192; ++i) {
+      size_t diff = 0;
+      IngestInterLanes(flushing);
+      diff += PollPrivateQueue(pending_.GetLowLat(), flushing);
+      if (diff == 0) {
+        break;
+      }
+      work += diff;
+    }
     work += PollPrivateQueue(pending_.GetHighLat(), flushing);
     PollPrivateQueue(pending_.GetLongRunning(), flushing);
     return work;
@@ -668,6 +659,19 @@ class Worker {
       LPointer<Task> task;
       task.shm_ = entry->p_;
       task.ptr_ = HRUN_CLIENT->GetMainPointer<Task>(entry->p_);
+      bool is_remote = task->domain_id_.IsRemote(
+          HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
+#ifdef HERMES_REMOTE_DEBUG
+      if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
+            !task->task_flags_.Any(TASK_REMOTE_DEBUG_MARK) &&
+            task->method_ != TaskMethod::kConstruct &&
+            HRUN_RUNTIME->remote_created_) {
+          is_remote = true;
+        }
+#endif
+      if (is_remote) {
+        task->SetRemote();
+      }
       if (pending_.push(PrivateTaskQueueEntry{task, &lane_info})) {
         lane->pop();
       } else {

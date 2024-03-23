@@ -412,13 +412,22 @@ class Server : public TaskLib {
       schema.plcmnts_.emplace_back(0, fallback_target_->id_);
       for (size_t sub_idx = 0; sub_idx < schema.plcmnts_.size(); ++sub_idx) {
         SubPlacement &placement = schema.plcmnts_[sub_idx];
+        if (placement.size_ == 0) {
+          continue;
+        }
         TargetInfo &bdev = *target_map_[placement.tid_];
         LPointer<bdev::AllocateTask> alloc_task =
             bdev.AsyncAllocate(task, task->task_node_ + 1,
                                blob_info.score_,
                                placement.size_,
                                blob_info.buffers_);
+        hshm::Timer t;
+        t.Resume();
         alloc_task->Wait<TASK_YIELD_CO>(task);
+        t.Pause();
+        HILOG(kInfo, "Allocated {} bytes in {} usec (state={}, method={})",
+              placement.size_, t.GetUsec(),
+              alloc_task->task_state_, alloc_task->method_);
         if (alloc_task->alloc_size_ < alloc_task->size_) {
           SubPlacement &next_placement = schema.plcmnts_[sub_idx + 1];
           size_t diff = alloc_task->size_ - alloc_task->alloc_size_;
