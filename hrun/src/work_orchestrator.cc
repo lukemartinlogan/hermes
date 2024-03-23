@@ -28,13 +28,9 @@ void WorkOrchestrator::ServerInit(ServerConfig *config, QueueManager &qm) {
   }
 
   // Spawn workers on the stream
-  size_t num_workers = config_->wo_.max_dworkers_ + config->wo_.max_oworkers_ + 1;
+  size_t num_workers = config_->wo_.max_dworkers_ + config->wo_.max_oworkers_;
   workers_.reserve(num_workers);
   int worker_id = 0;
-  // Spawn admin worker
-  workers_.emplace_back(std::make_unique<Worker>(worker_id, 0, xstream_));
-  admin_worker_ = workers_.back().get();
-  ++worker_id;
   // Spawn dedicated workers (dworkers)
   u32 num_dworkers = config_->wo_.max_dworkers_;
   for (; worker_id < num_dworkers; ++worker_id) {
@@ -71,14 +67,6 @@ void WorkOrchestrator::ServerInit(ServerConfig *config, QueueManager &qm) {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
-
-  // Schedule admin queue on first overlapping worker
-  MultiQueue *admin_queue = qm.GetQueue(qm.admin_queue_id_);
-  LaneGroup *admin_group = &admin_queue->GetGroup(0);
-  for (u32 lane_id = 0; lane_id < admin_group->num_lanes_; ++lane_id) {
-    admin_worker_->PollQueues({WorkEntry(0, lane_id, admin_queue)});
-  }
-  admin_group->num_scheduled_ = admin_group->num_lanes_;
 
   // Dedicate CPU cores to this runtime
   DedicateCores();

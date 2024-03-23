@@ -122,7 +122,7 @@ struct PushTask : public Task, TaskFlags<TF_LOCAL> {
     }
     if (orig_task->IsLongRunning()) {
       task_flags_.SetBits(TASK_LONG_RUNNING);
-      prio_ = TaskPrio::kLongRunning;
+      prio_ = TaskPrio::kHighLatency;
     } else {
       prio_ = TaskPrio::kLowLatency;
     }
@@ -181,7 +181,7 @@ struct DupTask : public Task, TaskFlags<TF_LOCAL> {
     }
     if (orig_task->IsLongRunning()) {
       task_flags_.SetBits(TASK_LONG_RUNNING);
-      prio_ = TaskPrio::kLongRunning;
+      prio_ = TaskPrio::kHighLatency;
     } else {
       prio_ = TaskPrio::kLowLatency;
     }

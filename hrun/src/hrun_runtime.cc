@@ -77,11 +77,21 @@ void Runtime::ServerInit(std::string server_config_path) {
   TaskStateId queue_sched_id = HRUN_CLIENT->MakeTaskStateId();
   admin_task = hipc::make_mptr<Admin::CreateTaskStateTask>();
   task_registry_.RegisterTaskLib("worch_queue_round_robin");
-  task_registry_.CreateTaskState(
+  TaskState *state = task_registry_.CreateTaskState(
       "worch_queue_round_robin",
       "worch_queue_round_robin",
       queue_sched_id,
       admin_task.get());
+
+  // Initially schedule queues to workers
+  auto queue_task = HRUN_CLIENT->NewTask<ScheduleTask>(
+      HRUN_CLIENT->MakeTaskNodeId(),
+      DomainId::GetLocal(),
+      queue_sched_id);
+  state->Run(queue_task->method_,
+             queue_task.ptr_,
+             queue_task->ctx_);
+  HRUN_CLIENT->DelTask(queue_task);
 
   // Create the work orchestrator process scheduling library
   TaskStateId proc_sched_id = HRUN_CLIENT->MakeTaskStateId();

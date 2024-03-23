@@ -94,7 +94,7 @@ TEST_CASE("TestHshmQueueEmplacePop") {
   hrun::QueueId qid(0, 3);
   u32 ops = (1 << 20);
   std::vector<PriorityInfo> queue_info = {
-      {TaskPrio::kAdmin, 16, 16, ops, 0}
+      {TaskPrio::kLowLatency, 16, 16, ops, 0}
   };
   auto queue = hipc::make_uptr<hrun::MultiQueue>(
       qid, queue_info);
@@ -119,7 +119,7 @@ TEST_CASE("TestHshmQueueEmplacePop") {
 TEST_CASE("TestHshmQueueGetLane") {
   hrun::QueueId qid(0, 3);
   std::vector<PriorityInfo> queue_info = {
-      {TaskPrio::kAdmin, 16, 16, 256, 0}
+      {TaskPrio::kLowLatency, 16, 16, 256, 0}
   };
   auto queue = hipc::make_uptr<hrun::MultiQueue>(
       qid, queue_info);
@@ -141,7 +141,7 @@ TEST_CASE("TestHshmQueueAllocateEmplacePop") {
   TRANSPARENT_HERMES();
   hrun::QueueId qid(0, 3);
   std::vector<PriorityInfo> queue_info = {
-      {TaskPrio::kAdmin, 16, 16, 256, 0}
+      {TaskPrio::kLowLatency, 16, 16, 256, 0}
   };
   auto queue = hipc::make_uptr<hrun::MultiQueue>(
       qid, queue_info);

@@ -29,7 +29,7 @@ struct RegisterTaskLibTaskTempl : public Task, TaskFlags<TF_SRL_SYM> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     if constexpr(method == 0)
     {
@@ -103,7 +103,7 @@ struct GetOrCreateTaskStateIdTask : public Task, TaskFlags<TF_SRL_SYM> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     method_ = Method::kGetOrCreateTaskStateId;
     task_flags_.SetBits(0);
@@ -161,7 +161,7 @@ struct CreateTaskStateTask : public Task, TaskFlags<TF_SRL_SYM | TF_REPLICA> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     method_ = Method::kCreateTaskState;
     task_flags_.SetBits(TASK_COROUTINE);
@@ -244,7 +244,7 @@ struct GetTaskStateIdTask : public Task, TaskFlags<TF_SRL_SYM> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     method_ = Method::kGetTaskStateId;
     task_flags_.SetBits(0);
@@ -295,7 +295,7 @@ struct DestroyTaskStateTask : public Task, TaskFlags<TF_SRL_SYM> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     method_ = Method::kDestroyTaskState;
     task_flags_.SetBits(0);
@@ -337,7 +337,7 @@ struct StopRuntimeTask : public Task, TaskFlags<TF_SRL_SYM> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     method_ = Method::kStopRuntime;
     task_flags_.SetBits(TASK_FIRE_AND_FORGET | TASK_FLUSH);
@@ -380,7 +380,7 @@ struct SetWorkOrchestratorPolicyTask : public Task, TaskFlags<TF_SRL_SYM> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     if constexpr(method == 0) {
       method_ = Method::kSetWorkOrchQueuePolicy;
@@ -428,7 +428,7 @@ struct FlushTask : public Task, TaskFlags<TF_SRL_SYM | TF_REPLICA> {
     // Initialize task
     task_node_ = task_node;
     lane_hash_ = 0;
-    prio_ = TaskPrio::kAdmin;
+    prio_ = TaskPrio::kLowLatency;
     task_state_ = HRUN_QM_CLIENT->admin_task_state_;
     method_ = Method::kFlush;
     task_flags_.SetBits(TASK_FLUSH | TASK_COROUTINE);

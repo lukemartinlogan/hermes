@@ -71,12 +71,6 @@ struct LaneGroup : public PriorityInfo {
     tether_ = priority.tether_;
   }
 
-  /** Check if this group is tethered */
-  HSHM_ALWAYS_INLINE
-  bool IsTethered() {
-    return flags_.Any(QUEUE_TETHERED);
-  }
-
   /** Check if this group is long-running or ADMIN */
   HSHM_ALWAYS_INLINE
   bool IsLowPriority() {

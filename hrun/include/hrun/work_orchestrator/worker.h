@@ -444,10 +444,14 @@ class Worker {
     std::vector<WorkEntry> work_queue;
     while (!poll_queues_.pop(work_queue).IsNull()) {
       for (const WorkEntry &entry : work_queue) {
-        // HILOG(kDebug, "Scheduled queue {} (lane {})", entry.queue_->id_, entry.lane_);
+        //
         if (entry.queue_->id_ == HRUN_QM_RUNTIME->process_queue_id_) {
+          HILOG(kDebug, "Worker {}: Scheduled queue {} (lane {}, prio {}) as a proc queue",
+                id_, entry.queue_->id_, entry.lane_id_, entry.prio_);
           work_proc_queue_.emplace_back(entry);
         } else {
+          HILOG(kDebug, "Worker {}: Scheduled queue {} (lane {}, prio {}) as an inter queue",
+                id_, entry.queue_->id_, entry.lane_id_, entry.prio_);
           work_inter_queue_.emplace_back(entry);
         }
       }
@@ -605,15 +609,10 @@ class Worker {
     // Process tasks in the pending queues
     IngestProcLanes(flushing);
     PollPrivateQueue(pending_.GetRoot(), flushing);
-    for (size_t i = 0; i < 256; ++i) {
-      IngestInterLanes(flushing);
-      if (!PollPrivateQueue(pending_.GetLowLat(), flushing)) {
-        break;
-      }
-    }
+    IngestInterLanes(flushing);
+    PollPrivateQueue(pending_.GetLowLat(), flushing);
     PollPrivateQueue(pending_.GetHighLat(), flushing);
     PollPrivateQueue(pending_.GetLongRunning(), flushing);
-    PollPrivateQueue(pending_.GetRoot(), flushing);
   }
 
   /** Ingest all process lanes */
@@ -639,10 +638,6 @@ class Worker {
     // Ingest tasks from the ingress queues
     Lane *&lane = lane_info.lane_;
     LaneData *entry;
-//    if (lane->GetSize()) {
-//      HILOG(kInfo, "Lane {} of type {} has {} entries",
-//            lane->id_, TYPE, lane->GetSize());
-//    }
     while (true) {
       if (lane->peek(entry).IsNull()) {
         break;
