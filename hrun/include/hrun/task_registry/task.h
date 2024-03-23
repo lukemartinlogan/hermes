@@ -60,8 +60,8 @@ class TaskLib;
 #define TASK_LANE_ALL BIT_OPT(u32, 19)
 /** This task flushes the runtime */
 #define TASK_FLUSH BIT_OPT(u32, 20)
-/** This task is considered a root task */
-#define TASK_IS_ROOT BIT_OPT(u32, 21)
+/** This task signals its completion */
+#define TASK_SIGNAL_COMPLETE BIT_OPT(u32, 21)
 /** This task is apart of remote debugging */
 #define TASK_REMOTE_DEBUG_MARK BIT_OPT(u32, 31)
 
@@ -266,13 +266,6 @@ struct RunContext {
   hshm::Timer timer_;
   void *pending_to_;
   size_t pending_key_;
-
-  /** Default constructor */
-  RunContext() : pending_to_(nullptr) {}
-
-  /** Emplace constructor */
-  RunContext(u32 lane_id)
-  : lane_id_(lane_id), pending_to_(nullptr) {}
 };
 
 /** A generic task base class */
@@ -462,6 +455,21 @@ struct Task : public hipc::ShmContainer {
     return task_flags_.Any(TASK_FLUSH);
   }
 
+  /** Set signal complete */
+  HSHM_ALWAYS_INLINE void SetSignalComplete() {
+    task_flags_.SetBits(TASK_SIGNAL_COMPLETE);
+  }
+
+  /** Check if task should signal complete */
+  HSHM_ALWAYS_INLINE bool ShouldSignalComplete() {
+    return task_flags_.Any(TASK_SIGNAL_COMPLETE);
+  }
+
+  /** Unset signal complete */
+  HSHM_ALWAYS_INLINE void UnsetSignalComplete() {
+    task_flags_.UnsetBits(TASK_SIGNAL_COMPLETE);
+  }
+
   /** Determine if time has elapsed */
   HSHM_ALWAYS_INLINE bool ShouldRun(hshm::Timepoint &cur_time, bool flushing) {
     if (!IsLongRunning()) {
@@ -509,7 +517,10 @@ struct Task : public hipc::ShmContainer {
           !IsFireAndForget() &&
           !IsLongRunning()) {
         ctx_.pending_to_ = parent_task;
-        parent_task->SetBlocked();
+        SetSignalComplete();
+        if constexpr (THREAD_MODEL != TASK_YIELD_EMPTY) {
+          parent_task->SetBlocked();
+        }
       }
     }
     Yield<THREAD_MODEL>();

@@ -939,7 +939,7 @@ class Worker {
   /** Free a task when it is no longer needed */
   HSHM_ALWAYS_INLINE
   void EndTask(TaskState *exec, LPointer<Task> &task) {
-    if (task->ctx_.pending_to_) {
+    if (task->ShouldSignalComplete()) {
       Task *pending_to = (Task*)task->ctx_.pending_to_;
       pending_.signal_complete(GetPendingQueue(pending_to),
                                task);

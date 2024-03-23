@@ -137,8 +137,7 @@ typedef const char* (*get_task_lib_name_t)(void);
     hrun::TaskState *exec = reinterpret_cast<hrun::TaskState*>(\
         new TYPE_UNWRAP(TRAIT_CLASS)());\
     exec->Init(task->id_, HRUN_CLIENT->GetQueueId(task->id_), state_name);\
-    RunContext rctx(0);\
-    exec->Run(hrun::TaskMethod::kConstruct, task, rctx);\
+    exec->Run(hrun::TaskMethod::kConstruct, task, task->ctx_);\
     return exec;\
   }\
   const char* get_task_lib_name(void) { return TASK_NAME; }\
