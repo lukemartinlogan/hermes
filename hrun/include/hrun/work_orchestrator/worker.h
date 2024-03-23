@@ -337,10 +337,10 @@ class PrivateTaskMultiQueue {
     }
     PrivateTaskQueueEntry entry;
     Task *pending = (Task*)done_task->ctx_.pending_to_;
-    if (!pending->IsBlocked()){
+    GetPending().pop(pending->ctx_.pending_key_, entry);
+    if (entry.task_.ptr_ != pending) {
       return true;
     }
-    GetPending().pop(pending->ctx_.pending_key_, entry);
     pending->UnsetBlocked();
     push<true>(entry);
     return true;
@@ -741,7 +741,7 @@ class Worker {
       pending_.erase(queue.id_, queue_off);
       EndTask(exec, task);
     } else if (task->IsBlocked()) {
-      pending_.push_pending(queue.id_, queue_off);
+      // pending_.push_pending(queue.id_, queue_off);
     }
     return exec;
   }
@@ -950,11 +950,11 @@ class Worker {
   /** Free a task when it is no longer needed */
   HSHM_ALWAYS_INLINE
   void EndTask(TaskState *exec, LPointer<Task> &task) {
-    if (task->ShouldSignalComplete()) {
-      Task *pending_to = (Task*)task->ctx_.pending_to_;
-      pending_.signal_complete(GetPendingQueue(pending_to),
-                               task);
-    }
+//    if (task->ShouldSignalComplete()) {
+//      Task *pending_to = (Task*)task->ctx_.pending_to_;
+//      pending_.signal_complete(GetPendingQueue(pending_to),
+//                               task);
+//    }
     if (exec && task->IsFireAndForget()) {
       exec->Del(task->method_, task.ptr_);
     } else {

@@ -421,13 +421,7 @@ class Server : public TaskLib {
                                blob_info.score_,
                                placement.size_,
                                blob_info.buffers_);
-        hshm::Timer t;
-        t.Resume();
         alloc_task->Wait<TASK_YIELD_CO>(task);
-        t.Pause();
-        HILOG(kInfo, "Allocated {} bytes in {} usec (state={}, method={})",
-              placement.size_, t.GetUsec(),
-              alloc_task->task_state_, alloc_task->method_);
         if (alloc_task->alloc_size_ < alloc_task->size_) {
           SubPlacement &next_placement = schema.plcmnts_[sub_idx + 1];
           size_t diff = alloc_task->size_ - alloc_task->alloc_size_;
