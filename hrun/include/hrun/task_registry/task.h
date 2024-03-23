@@ -62,6 +62,8 @@ class TaskLib;
 #define TASK_FLUSH BIT_OPT(u32, 20)
 /** This task signals its completion */
 #define TASK_SIGNAL_COMPLETE BIT_OPT(u32, 21)
+/** This task is a remote task */
+#define TASK_REMOTE BIT_OPT(u32, 22)
 /** This task is apart of remote debugging */
 #define TASK_REMOTE_DEBUG_MARK BIT_OPT(u32, 31)
 
@@ -468,6 +470,21 @@ struct Task : public hipc::ShmContainer {
   /** Unset signal complete */
   HSHM_ALWAYS_INLINE void UnsetSignalComplete() {
     task_flags_.UnsetBits(TASK_SIGNAL_COMPLETE);
+  }
+
+  /** Mark this task as remote */
+  HSHM_ALWAYS_INLINE void SetRemote() {
+    task_flags_.SetBits(TASK_REMOTE);
+  }
+
+  /** Check if task is remote */
+  HSHM_ALWAYS_INLINE bool IsRemote() {
+    return task_flags_.Any(TASK_REMOTE);
+  }
+
+  /** Unset remote */
+  HSHM_ALWAYS_INLINE void UnsetRemote() {
+    task_flags_.UnsetBits(TASK_REMOTE);
   }
 
   /** Determine if time has elapsed */

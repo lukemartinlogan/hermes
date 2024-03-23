@@ -303,7 +303,23 @@ class PrivateTaskMultiQueue {
         root_count_ += ret;
       }
       return ret;
-    } if (task->IsLongRunning()) {
+    }
+
+    bool is_remote = task->domain_id_.IsRemote(
+        HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
+#ifdef HERMES_REMOTE_DEBUG
+    if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
+            !task->task_flags_.Any(TASK_REMOTE_DEBUG_MARK) &&
+            task->method_ != TaskMethod::kConstruct &&
+            HRUN_RUNTIME->remote_created_) {
+          is_remote = true;
+        }
+#endif
+    if (is_remote) {
+      task->SetRemote();
+    }
+
+    if (task->IsLongRunning()) {
       return GetLongRunning().push(entry);
     } else if (task->prio_ == TaskPrio::kLowLatency) {
       return GetLowLat().push(entry);
@@ -734,22 +750,13 @@ class Worker {
                                  u32 lane_id,
                                  bool flushing) {
     bitfield32_t props;
-    bool is_remote = task->domain_id_.IsRemote(
-        HRUN_RPC->GetNumHosts(), HRUN_CLIENT->node_id_);
-#ifdef HERMES_REMOTE_DEBUG
-    if (task->task_state_ != HRUN_QM_CLIENT->admin_task_state_ &&
-            !task->task_flags_.Any(TASK_REMOTE_DEBUG_MARK) &&
-            task->method_ != TaskMethod::kConstruct &&
-            HRUN_RUNTIME->remote_created_) {
-          is_remote = true;
-        }
-#endif
+
     bool group_avail = CheckTaskGroup(task, exec,
                                       lane_id,
                                       task->task_node_,
-                                      is_remote);
+                                      task->IsRemote());
     bool should_run = task->ShouldRun(cur_time, flushing);
-    if (is_remote) {
+    if (task->IsRemote()) {
       props.SetBits(HSHM_WORKER_IS_REMOTE);
     }
     if (group_avail) {
