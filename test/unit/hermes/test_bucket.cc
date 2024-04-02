@@ -152,7 +152,7 @@ TEST_CASE("TestHermesPutGet") {
       REQUIRE(blob.size() == blob2.size());
       REQUIRE(blob == blob2);
     }
-    sleep(5);
+    // sleep(5);
   }
 }
 
