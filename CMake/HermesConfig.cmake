@@ -108,7 +108,7 @@ set(Hermes_LIBRARIES
         thallium
         hermes
         ${Boost_LIBRARIES} ${Hermes_LIBRARY})
-set(Hermes_LIBRARY_DIRS ${HermeShm_LIBRARY_DIRS})
+set(Hermes_LIBRARY_DIRS ${HermesShm_LIBRARY_DIRS})
 # Set Hermes client dirs (equal to Hermes dirs)
 set(Hermes_CLIENT_LIBRARIES ${Hermes_LIBRARIES})
 set(Hermes_CLIENT_LIBRARY_DIRS ${Hermes_LIBRARY_DIRS})
@@ -116,5 +116,5 @@ set(Hermes_CLIENT_LIBRARY_DIRS ${Hermes_LIBRARY_DIRS})
 set(Hermes_RUNTIME_LIBRARIES
         ${Hermes_CLIENT_LIBRARIES}
         hrun_runtime)
-set(Hermes_RUNTIME_LIBRARY_DIRS ${HermeShm_LIBRARY_DIRS})
+set(Hermes_RUNTIME_LIBRARY_DIRS ${Hermes_LIBRARY_DIRS})
 set(Hermes_RUNTIME_DEPS "")
