@@ -467,6 +467,31 @@ class Bucket {
   HSHM_ALWAYS_INLINE
   AsyncBaseGet(const std::string &blob_name,
                const BlobId &blob_id,
+               LPointer<char> &blob,
+               size_t data_size,
+               size_t blob_off,
+               Context &ctx) {
+    bitfield32_t flags;
+    // Get the blob ID
+    if (blob_id.IsNull()) {
+      flags.SetBits(HERMES_GET_BLOB_ID);
+    }
+    // Get from shared memory
+    LPointer<hrunpq::TypedPushTask<GetBlobTask>> push_task;
+    push_task = blob_mdm_->AsyncGetBlobRoot(id_, hshm::to_charbuf(blob_name),
+                                            blob_id, blob_off,
+                                            data_size, blob.shm_,
+                                            ctx, flags.bits_);
+    return push_task;
+  }
+
+  /**
+   * Get \a blob_id Blob from the bucket (async)
+   * */
+  LPointer<hrunpq::TypedPushTask<GetBlobTask>>
+  HSHM_ALWAYS_INLINE
+  AsyncBaseGet(const std::string &blob_name,
+               const BlobId &blob_id,
                Blob &blob,
                size_t blob_off,
                Context &ctx) {
@@ -484,6 +509,33 @@ class Bucket {
                                             data_size, data_p.shm_,
                                             ctx, flags.bits_);
     return push_task;
+  }
+
+  /**
+   * Get \a blob_id Blob from the bucket (sync)
+   * */
+  BlobId BaseGet(const std::string &blob_name,
+                 const BlobId &orig_blob_id,
+                 LPointer<char> &blob,
+                 size_t &data_size,
+                 size_t blob_off,
+                 Context &ctx) {
+    // TODO(llogan): intercept mmap to avoid copy
+    if (data_size == 0 || blob.ptr_ == nullptr) {
+      data_size = blob_mdm_->GetBlobSizeRoot(
+          id_, hshm::charbuf(blob_name), orig_blob_id);
+      blob = HRUN_CLIENT->AllocateBufferClient(data_size);
+    }
+    HILOG(kDebug, "Getting blob of size {}", data_size);
+    BlobId blob_id;
+    LPointer<hrunpq::TypedPushTask<GetBlobTask>> push_task;
+    push_task = AsyncBaseGet(blob_name, orig_blob_id, blob, data_size,
+                             blob_off, ctx);
+    push_task->Wait();
+    GetBlobTask *task = push_task->get();
+    blob_id = task->blob_id_;
+    HRUN_CLIENT->DelTask(push_task);
+    return blob_id;
   }
 
   /**
@@ -524,14 +576,16 @@ class Bucket {
                     const BlobId &orig_blob_id,
                     T &data,
                     Context &ctx) {
-    Blob blob;
-    BlobId blob_id = BaseGet(blob_name, orig_blob_id, blob, 0, ctx);
-    if (blob.size() == 0) {
+    LPointer<char> blob;
+    size_t data_size = 0;
+    BlobId blob_id = BaseGet(blob_name, orig_blob_id, blob, data_size, 0, ctx);
+    if (data_size == 0) {
       return BlobId::GetNull();
     }
-    std::stringstream ss(std::string(blob.data(), blob.size()));
+    std::stringstream ss(std::string(blob.ptr_, data_size));
     cereal::BinaryInputArchive ar(ss);
     ar >> data;
+    HRUN_CLIENT->FreeBuffer(blob);
     return blob_id;
   }
 
