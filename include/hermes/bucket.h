@@ -226,16 +226,13 @@ class Bucket {
   HSHM_ALWAYS_INLINE
   BlobId BasePut(const std::string &blob_name,
                  const BlobId &orig_blob_id,
-                 const Blob &blob,
+                 const LPointer<char> &blob,
+                 size_t data_size,
                  size_t blob_off,
                  Context &ctx) {
     BlobId blob_id = orig_blob_id;
     bitfield32_t flags, task_flags(
         TASK_FIRE_AND_FORGET | TASK_DATA_OWNER | TASK_LOW_LATENCY);
-    // Copy data to shared memory
-    LPointer<char> p = HRUN_CLIENT->AllocateBufferClient(blob.size());
-    char *data = p.ptr_;
-    memcpy(data, blob.data(), blob.size());
     // Put to shared memory
     hshm::charbuf blob_name_buf = hshm::to_charbuf(blob_name);
     if constexpr (!ASYNC) {
@@ -249,8 +246,8 @@ class Bucket {
     }
     LPointer<hrunpq::TypedPushTask<PutBlobTask>> push_task;
     push_task = blob_mdm_->AsyncPutBlobRoot(id_, blob_name_buf,
-                                            blob_id, blob_off, blob.size(),
-                                            p.shm_, ctx.blob_score_,
+                                            blob_id, blob_off, data_size,
+                                            blob.shm_, ctx.blob_score_,
                                             flags.bits_, ctx, task_flags.bits_);
     if constexpr (!ASYNC) {
       if (flags.Any(HERMES_GET_BLOB_ID)) {
@@ -266,6 +263,24 @@ class Bucket {
   /**
    * Put \a blob_name Blob into the bucket
    * */
+  template<bool PARTIAL, bool ASYNC>
+  HSHM_ALWAYS_INLINE
+  BlobId BasePut(const std::string &blob_name,
+                 const BlobId &orig_blob_id,
+                 const Blob &blob,
+                 size_t blob_off,
+                 Context &ctx) {
+    // Copy data to shared memory
+    LPointer<char> p = HRUN_CLIENT->AllocateBufferClient(blob.size());
+    char *data = p.ptr_;
+    memcpy(data, blob.data(), blob.size());
+    return BasePut<PARTIAL, ASYNC>(
+        blob_name, orig_blob_id, p, blob.size(), blob_off, ctx);
+  }
+
+  /**
+   * Put \a blob_name Blob into the bucket
+   * */
   template<typename T, bool PARTIAL, bool ASYNC>
   HSHM_ALWAYS_INLINE
   BlobId SrlBasePut(const std::string &blob_name,
@@ -275,8 +290,11 @@ class Bucket {
     std::stringstream ss;
     cereal::BinaryOutputArchive ar(ss);
     ar << data;
-    Blob blob(ss.str());
-    return BasePut<PARTIAL, ASYNC>(blob_name, orig_blob_id, blob, 0, ctx);
+    std::string srl_str = ss.str();
+    LPointer<char> blob = HRUN_CLIENT->AllocateBufferClient(srl_str.size());
+    memcpy(blob.ptr_, srl_str.data(), srl_str.size());
+    return BasePut<PARTIAL, ASYNC>(blob_name, orig_blob_id,
+                                   blob, srl_str.size(), 0, ctx);
   }
 
   /**
@@ -315,7 +333,7 @@ class Bucket {
   template<typename T = Blob>
   HSHM_ALWAYS_INLINE
   void AsyncPut(const std::string &blob_name,
-                const Blob &blob,
+                const T &blob,
                 Context &ctx) {
     if constexpr(std::is_same_v<T, Blob>) {
       BasePut<false, true>(blob_name, BlobId::GetNull(), blob, 0, ctx);
@@ -330,7 +348,7 @@ class Bucket {
   template<typename T>
   HSHM_ALWAYS_INLINE
   void AsyncPut(const BlobId &blob_id,
-                const Blob &blob,
+                const T &blob,
                 Context &ctx) {
     if constexpr(std::is_same_v<T, Blob>) {
       BasePut<false, true>("", blob_id, blob, 0, ctx);
