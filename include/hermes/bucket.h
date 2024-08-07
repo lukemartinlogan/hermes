@@ -343,6 +343,17 @@ class Bucket {
   }
 
   /**
+  * Put \a blob_name Blob into the bucket
+  * */
+  HSHM_ALWAYS_INLINE
+  void AsyncPut(const std::string &blob_name,
+                const LPointer<char> &blob,
+                size_t data_size,
+                Context &ctx) {
+    BasePut<false, true>(blob_name, BlobId::GetNull(), blob, data_size, 0, ctx);
+  }
+
+  /**
    * Put \a blob_id Blob into the bucket
    * */
   template<typename T>
@@ -355,6 +366,17 @@ class Bucket {
     } else {
       SrlBasePut<T, false, true>("", blob_id, blob, ctx);
     }
+  }
+
+  /**
+  * Put \a blob_name Blob into the bucket
+  * */
+  HSHM_ALWAYS_INLINE
+  void AsyncPut(const BlobId &blob_id,
+                const LPointer<char> &blob,
+                size_t data_size,
+                Context &ctx) {
+    BasePut<false, true>("", blob_id, blob, data_size, 0, ctx);
   }
 
   /**
@@ -615,6 +637,16 @@ class Bucket {
     } else {
       return SrlBaseGet<T>("", blob_id, blob, ctx);
     }
+  }
+
+  /**
+   * Get \a blob_id Blob from the bucket
+   * */
+  BlobId Get(const BlobId &blob_id,
+             LPointer<char> &blob,
+             size_t &blob_size,
+             Context &ctx) {
+    return BaseGet("", blob_id, blob, blob_size, 0, ctx);
   }
 
   /**
